@@ -4,7 +4,7 @@
 ### Nodes of Vless, Hysteria, Direct, ShadowTLS, and Shadowsocks protocols are deployed using sing-box, and TUIC and NaiveProxy nodes are deployed using official programs.
 ### All codes are from official documentation;The script is completely open source,you can use it with confidence!
 
-# **Install**
+# **Installation**
 ```
 #Debian&&Ubuntu
 apt update && apt -y install curl
