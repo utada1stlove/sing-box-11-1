@@ -749,7 +749,7 @@ function tuic_apply_certificate() {
     done
     
     echo "正在申请证书..."
-    curl -s https://get.acme.sh | sh -s email=my@example.com
+    curl -s https://get.acme.sh | sh -s email=example@gmail.com
     alias acme.sh=~/.acme.sh/acme.sh
     ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
 
