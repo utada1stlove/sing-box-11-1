@@ -749,14 +749,14 @@ function tuic_apply_certificate() {
     done
     
     echo "正在申请证书..."
-    curl -s https://get.acme.sh | sh -s email=my@example.com &>/dev/null
+    curl -s https://get.acme.sh | sh -s email=my@example.com
     alias acme.sh=~/.acme.sh/acme.sh
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt &>/dev/null
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
 
     if $has_ipv4; then
-        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone &>/dev/null
+        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone
     else
-        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6 &>/dev/null
+        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6
     fi
 
     echo "安装证书..."
