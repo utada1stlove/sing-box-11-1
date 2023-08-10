@@ -1,59 +1,30 @@
 #!/bin/bash
 
-# 定义颜色变量
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-# 根据系统版本自动安装依赖
-function install_dependencies() {
-    local os_version
-    os_version=$(lsb_release -si 2>/dev/null)
+function configure_dns64() {
+    local ipv4_address
+    local ipv6_address
 
-    local dependencies
-    local common_dependencies="wget tar socat jq git openssl"
-
-    case "$os_version" in
-        Debian|Ubuntu)
-            dependencies="$common_dependencies uuid-runtime build-essential zlib1g-dev libssl-dev libevent-dev"
-            ;;
-        CentOS)
-            dependencies="$common_dependencies util-linux gcc-c++ zlib-devel openssl-devel libevent-devel"
-            ;;
-        *)
-            echo -e "${RED}不支持的操作系统: $os_version${NC}"
-            exit 1
-            ;;
-    esac
-
-    if ! command -v apt-get &> /dev/null && ! command -v dnf &> /dev/null && ! command -v yum &> /dev/null; then
-        echo -e "${RED}不支持的包管理器，无法继续安装依赖。${NC}"
-        exit 1
+    ipv4_address=$(curl -s4 ifconfig.co)
+    ipv6_address=$(curl -s6 ifconfig.co)
+    
+    if [[ -n $ipv4_address ]]; then
+        return
     fi
 
-    echo "更新软件包列表..."
-    if command -v apt-get &> /dev/null; then
-        apt-get update
-    elif command -v dnf &> /dev/null; then
-        dnf makecache
-    elif command -v yum &> /dev/null; then
-        yum makecache
+    if [[ -n $ipv6_address ]]; then
+        echo "检查到本机为 IPv6 单栈网络，配置 DNS64..."
+        sed -i '/^nameserver /s/^/#/' /etc/resolv.conf 
+        echo "nameserver 2001:67c:2b0::4" >> /etc/resolv.conf
+        echo "nameserver 2001:67c:2b0::6" >> /etc/resolv.conf
+        echo "DNS64 配置完成。"
     fi
-
-    echo "下载并安装依赖..."
-    if command -v apt-get &> /dev/null; then
-        apt-get install -y $dependencies
-    elif command -v dnf &> /dev/null; then
-        dnf install -y $dependencies
-    elif command -v yum &> /dev/null; then
-        yum install -y $dependencies
-    fi
-
-    echo "依赖已安装。"
 }
 
-# 检查防火墙配置
 function check_firewall_configuration() {
     local os_name=$(uname -s)
     local firewall
@@ -91,6 +62,7 @@ function check_firewall_configuration() {
             if ! ufw status | grep -q " 80"; then
                 ufw allow 80
             fi
+            ufw reload
 
             echo "防火墙配置已更新。"
             ;;
@@ -155,7 +127,6 @@ function check_firewall_configuration() {
     esac
 }
 
-# 检查 sing-box 文件夹是否存在，如果不存在则创建
 function check_sing_box_folder() {
     local folder="/usr/local/etc/sing-box"
     if [[ ! -d "$folder" ]]; then
@@ -163,7 +134,6 @@ function check_sing_box_folder() {
     fi
 }
 
-# 检查 caddy 文件夹是否存在，如果不存在则创建
 function check_caddy_folder() {
     local folder="/usr/local/etc/caddy"
     if [[ ! -d "$folder" ]]; then
@@ -171,7 +141,6 @@ function check_caddy_folder() {
     fi
 }
 
-# 创建文件目录
 function create_tuic_directory() {
     local tuic_directory="/usr/local/etc/tuic"
     local ssl_directory="/etc/ssl/private"
@@ -185,7 +154,6 @@ function create_tuic_directory() {
     fi
 }
 
-# 开启 BBR
 function enable_bbr() {
     if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
         echo "开启 BBR..."
@@ -198,7 +166,6 @@ function enable_bbr() {
     fi
 }
 
-# 选择安装方式
 function select_sing_box_install_option() {
     while true; do
         echo "请选择 sing-box 的安装方式："
@@ -225,10 +192,9 @@ function select_sing_box_install_option() {
     done
 }
 
-# 检查并安装 Go
 function install_go() {
     if ! command -v go &> /dev/null; then
-        echo "下载并安装 Go..."
+        echo "正在下载 Go..."
         local go_arch
         case $(uname -m) in
             x86_64)
@@ -249,13 +215,12 @@ function install_go() {
                 ;;
         esac
 
-        # 获取最新版本的 Go 下载链接
         local go_version
-        go_version=$(curl -sL "https://golang.org/VERSION?m=text")
+        go_version=$(wget -qO- "https://golang.org/VERSION?m=text" | grep -o 'go[0-9.]\+')
         local go_download_url="https://go.dev/dl/$go_version.linux-$go_arch.tar.gz"
 
-        wget -c "$go_download_url" -O - | tar -xz -C /usr/local
-        echo 'export PATH=$PATH:/usr/local/go/bin' |  tee -a /etc/profile
+        wget -qO- "$go_download_url" | tar -xz -C /usr/local
+        echo 'export PATH=$PATH:/usr/local/go/bin' |  tee -a /etc/profile >/dev/null
         source /etc/profile
         go version
         
@@ -265,7 +230,6 @@ function install_go() {
     fi
 }
 
-# 编译安装sing-box
 function compile_install_sing_box() {
     local go_install_command="go install -v -tags \
 with_quic,\
@@ -296,13 +260,11 @@ github.com/sagernet/sing-box/cmd/sing-box@latest"
     fi
 }
 
-# 下载并安装最新的 Sing-Box 版本
 function install_latest_sing_box() {
     local arch=$(uname -m)
     local url="https://api.github.com/repos/SagerNet/sing-box/releases/latest"
     local download_url
 
-    # 根据 VPS 架构确定合适的下载 URL
     case $arch in
         x86_64)
             download_url=$(curl -s $url | grep -o "https://github.com[^\"']*linux-amd64.tar.gz")
@@ -322,14 +284,11 @@ function install_latest_sing_box() {
             ;;
     esac
 
-    # 下载并安装 Sing-Box
     if [ -n "$download_url" ]; then
         echo "正在下载 Sing-Box..."
-        curl -L -o sing-box.tar.gz "$download_url"
+        wget -qO sing-box.tar.gz "$download_url" 2>&1 >/dev/null
         tar -xzf sing-box.tar.gz -C /usr/local/bin --strip-components=1
         rm sing-box.tar.gz
-
-        # 赋予可执行权限
         chmod +x /usr/local/bin/sing-box
 
         echo "Sing-Box 安装成功！"
@@ -339,25 +298,16 @@ function install_latest_sing_box() {
     fi
 }
 
-# 编译安装 Caddy
 function install_caddy() {
-    # 安装 xcaddy 工具
     echo "安装 xcaddy..."
     go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-
-    # 编译安装 Caddy
     ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
-
-    # 添加网络绑定权限
     setcap cap_net_bind_service=+ep ./caddy
 
-    # 移动 Caddy 到 /usr/bin/
     mv caddy /usr/bin/
-
     echo "Caddy 安装完成。"
 }
 
-# 自动获取并下载最新版的 TUIC 程序
 function download_tuic() {
     local repo="EAimTY/tuic"
     local arch=$(uname -m)
@@ -390,20 +340,18 @@ function download_tuic() {
     fi
 
     echo "正在下载最新版 TUIC 程序..."
-    wget -qO /usr/local/bin/tuic "$download_url"
+    wget -O /usr/local/bin/tuic "$download_url" >/dev/null 2>&1
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}下载 TUIC 程序失败。${NC}"
         exit 1
     fi
 
-    # 赋予可执行权限
     chmod +x /usr/local/bin/tuic
 
     echo "TUIC 程序下载并安装完成。"
 }
 
-# 配置 sing-box 自启动服务
 function configure_sing_box_service() {
     echo "配置 sing-box 开机自启服务..."
     local service_file="/etc/systemd/system/sing-box.service"
@@ -418,11 +366,12 @@ Documentation=https://sing-box.sagernet.org
 After=network.target nss-lookup.target
 
 [Service]
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
 ExecStart=/usr/local/bin/sing-box run -c /usr/local/etc/sing-box/config.json
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
-RestartSec=1800s
+RestartSec=10s
 LimitNOFILE=infinity
 
 [Install]
@@ -432,7 +381,6 @@ WantedBy=multi-user.target'
         echo "sing-box 开机自启动服务已配置。"
 }
 
-# 配置 Caddy 自启动服务
 function configure_caddy_service() {
     echo "配置 Caddy 开机自启动服务..."
     local service_file="/etc/systemd/system/caddy.service"
@@ -465,7 +413,6 @@ WantedBy=multi-user.target'
         echo "Caddy 开机自启动服务已配置。"
 }
 
-# 配置 tuic 自启动服务
 function configure_tuic_service() {
     echo "配置TUIC开机自启服务..."
     local service_file="/etc/systemd/system/tuic.service"
@@ -496,7 +443,6 @@ WantedBy=multi-user.target'
         echo "TUIC 开机自启动服务已配置。"
 }
 
-# 设置监听端口
 function set_listen_port() {
     while true; do
         read -p "请输入监听端口 (默认443): " listen_port
@@ -506,39 +452,18 @@ function set_listen_port() {
             echo "监听端口设置成功：$listen_port" 
             break
         else
-            echo -e "${RED}错误：监听端口范围必须在1-65535之间，请重新输入。${NC}"
+            echo -e "${RED}错误：监听端口范围必须在1-65535之间，请重新输入。${NC}" >&2
         fi
     done
 }
 
-# 设置监听端口
-function generate_listen_port() {
-    local listen_port
-
-    while true; do
-        read -p "请输入监听端口 (默认为 443): " listen_port
-        listen_port=${listen_port:-443}
-
-        if ! [[ "$listen_port" =~ ^[1-9][0-9]{0,4}$ || "$listen_port" == "443" ]]; then
-            echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}" >&2
-        else
-            break
-        fi
-    done
-
-    echo "$listen_port"
-}
-
-# 设置目标地址
 function Direct_override_address() {
     local is_valid_address=false
 
     while [[ "$is_valid_address" == "false" ]]; do
         read -p "请输入目标地址: " override_address
 
-        # 检查是否为合法的 IPv4 地址
         if [[ $override_address =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-            # 检查每个字段是否在 0 到 255 之间
             IFS='.' read -r -a address_fields <<< "$override_address"
             is_valid_ip=true
             for field in "${address_fields[@]}"; do
@@ -559,7 +484,6 @@ function Direct_override_address() {
     done
 }
 
-# 设置目标端口
 function Direct_override_port() {
     while true; do
         read -p "请输入目标端口 (默认443): " override_port
@@ -573,7 +497,6 @@ function Direct_override_port() {
     done
 }
 
-# 设置加密方式
 function ss_encryption_method() {
     while true; do
         read -p "请选择加密方式：
@@ -609,7 +532,6 @@ function ss_encryption_method() {
     done
 }
 
-# 生成随机用户名
 function generate_caddy_auth_user() {
     read -p "请输入用户名（默认自动生成）: " user_input
 
@@ -622,7 +544,6 @@ function generate_caddy_auth_user() {
     echo "用户名: $auth_user"
 }
 
-# 生成随机密码
 function generate_caddy_auth_pass() {
     read -p "请输入密码（默认自动生成）: " pass_input
 
@@ -635,7 +556,6 @@ function generate_caddy_auth_pass() {
     echo "密码: $auth_pass"
 }
 
-# 设置伪装网址
 function get_caddy_fake_site() {
     while true; do
         read -p "请输入伪装网址（默认: www.fan-2000.com）: " fake_site
@@ -651,7 +571,6 @@ function get_caddy_fake_site() {
     done
 }
 
-# 设置域名
 function get_caddy_domain() {
     read -p "请输入域名（用于自动申请证书）: " domain
     while true; do
@@ -670,7 +589,6 @@ function get_caddy_domain() {
     echo "域名: $domain"
 }
 
-# 测试 caddy 配置文件
 function test_caddy_config() {
     echo "测试 Caddy 配置是否正确..."
     local output
@@ -689,7 +607,6 @@ function test_caddy_config() {
     fi
 }
 
-# 自动生成UUID
 function tuic_generate_uuid() {
     if [[ -n $(command -v uuidgen) ]]; then
         uuid=$(uuidgen)
@@ -699,43 +616,37 @@ function tuic_generate_uuid() {
         echo -e "${RED}错误：无法生成UUID，请手动设置。${NC}"
         exit 1
     fi
-    echo "生成的UUID为：$uuid"
+    echo "随机生成的UUID为：$uuid"
 }
 
-# 设置密码
 function tuic_set_password() {
     read -p "请输入密码（默认随机生成）: " password
 
-    # 如果密码为空，则随机生成一个密码
     if [[ -z "$password" ]]; then
         password=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 12 | head -n 1)
-        echo "生成的密码为：$password"
+        echo "随机生成的密码为：$password"
     fi
 }
 
-# 添加多用户
 function tuic_add_multiple_users() {
     while true; do
-        read -p "是否继续添加用户？(Y/N): " add_multiple_users
+        read -p "是否继续添加用户？(Y/N, 默认为N): " add_multiple_users
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            # 自动生成UUID
+        if [[ -z "$add_multiple_users" || "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+
             tuic_generate_uuid
 
-            # 设置密码
             tuic_set_password
 
-            # 将UUID和密码添加到用户列表中
             users+=",\n\"$uuid\": \"$password\""
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
-            break
         else
             echo -e "${RED}错误：无效的选择，请重新输入。${NC}"
         fi
     done
 }
 
-# 设置证书和私钥路径
 function set_certificate_and_private_key() {
     while true; do
         read -p "请输入证书路径 (默认/etc/ssl/private/cert.crt): " certificate_path
@@ -760,7 +671,6 @@ function set_certificate_and_private_key() {
     done
 }
 
-# 设置拥塞控制算法
 function set_congestion_control() {
     local default_congestion_control="bbr"
 
@@ -795,7 +705,6 @@ function set_congestion_control() {
     done
 }
 
-# 询问证书来源选择
 function ask_certificate_option() {
     while true; do
         read -p "请选择证书来源：
@@ -821,15 +730,17 @@ function ask_certificate_option() {
     done
 }
 
-# 申请证书
 function tuic_apply_certificate() {
     local domain
+    local has_ipv4=false
 
-    # 验证域名
+    if curl -s4 ifconfig.co &>/dev/null; then
+        has_ipv4=true
+    fi
+
     while true; do
         read -p "请输入您的域名: " domain
 
-        # 检查域名是否绑定本机IP
         if ping -c 1 "$domain" &>/dev/null; then
             break
         else
@@ -837,17 +748,17 @@ function tuic_apply_certificate() {
         fi
     done
     
-    # 安装 acme
-    echo "安装 acme..."
-    curl https://get.acme.sh | sh 
+    echo "正在申请证书..."
+    curl -s https://get.acme.sh | sh -s email=my@example.com &>/dev/null
     alias acme.sh=~/.acme.sh/acme.sh
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt 
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt &>/dev/null
 
-    # 申请证书
-    echo "申请证书..."
-    ~/.acme.sh/acme.sh --issue -d "$domain" --standalone -k ec-256 --webroot /home/wwwroot/html 
+    if $has_ipv4; then
+        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone &>/dev/null
+    else
+        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6 &>/dev/null
+    fi
 
-    # 安装证书
     echo "安装证书..."
     certificate_path=$(~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path")
 
@@ -855,7 +766,6 @@ function tuic_apply_certificate() {
     set_private_key_path="$private_key_path"
 }
 
-# 设置上行速度
 function read_up_speed() {
     while true; do
         read -p "请输入上行速度 (默认50): " up_mbps
@@ -870,7 +780,6 @@ function read_up_speed() {
     done
 }
 
-# 设置下行速度
 function read_down_speed() {
     while true; do
         read -p "请输入下行速度 (默认100): " down_mbps
@@ -885,14 +794,12 @@ function read_down_speed() {
     done
 }
 
-# 设置认证密码
 function read_auth_password() {
     read -p "请输入认证密码 (默认随机生成): " auth_password
     auth_password=${auth_password:-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)}
     echo "认证密码设置成功：$auth_password"
 }
 
-# 设置用户信息
 function read_users() {
     users="[
         {
@@ -922,7 +829,6 @@ function read_users() {
     users+=$'\n      ]'
 }
 
-# 验证域名解析
 function validate_domain() {
     while true; do
         read -p "请输入您的域名: " domain
@@ -935,20 +841,17 @@ function validate_domain() {
     done
 }
 
-# 设置用户名
 function set_shadowtls_username() {
     read -p "请输入用户名 (默认随机生成): " new_username
     username=${new_username:-$(generate_shadowtls_random_username)}
     echo "用户名: $username"
 }
 
-# 生成随机用户名
 function generate_shadowtls_random_username() {
     local username=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
     echo "$username"
 }
 
-# 生成 ShadowTLS 密码
 function generate_shadowtls_password() {
     read -p "请选择 Shadowsocks 加密方式：
 [1]. 2022-blake3-chacha20-poly1305
@@ -984,7 +887,6 @@ function generate_shadowtls_password() {
     echo "加密方式: $ss_method"
 }
 
-# 添加用户
 function add_shadowtls_user() {
     local user_password=""
     if [[ $encryption_choice == 1 || $encryption_choice == 2 ]]; then
@@ -1005,7 +907,6 @@ function add_shadowtls_user() {
     echo "ShadowTLS 密码: $user_password"
 }
 
-# 设置握手服务器地址
 function set_shadowtls_handshake_server() {
     local handshake_server=""
     local openssl_output=""
@@ -1013,7 +914,6 @@ function set_shadowtls_handshake_server() {
     read -p "请输入握手服务器地址 (默认www.apple.com): " handshake_server
     handshake_server=${handshake_server:-www.apple.com}
 
-    # 验证握手服务器是否支持TLS 1.3
     echo "正在验证握手服务器支持的TLS版本..."
 
     local is_supported="false"
@@ -1045,20 +945,17 @@ function set_shadowtls_handshake_server() {
     handshake_server_global=$handshake_server
 }
 
-# 生成随机 UUID
 function reality_generate_uuid() {
     local uuid=$(uuidgen)
     echo "$uuid"
 }
 
-# 生成随机 ShortId
 function generate_short_id() {
     local length=$1
     local short_id=$(openssl rand -hex "$length")
     echo "$short_id"
 }
 
-# 选择流控类型
 function select_flow_type() {
     local flow_type="xtls-rprx-vision"
 
@@ -1086,7 +983,6 @@ function select_flow_type() {
     echo "$flow_type"
 }
 
-# 验证服务器是否支持TLS 1.3
 function validate_tls13_support() {
     local server="$1"
     local tls13_supported="false"
@@ -1101,13 +997,11 @@ function validate_tls13_support() {
     echo "$tls13_supported"
 }
 
-# ServerName 配置
 function generate_server_name_config() {
     local server_name="www.gov.hk"
 
     read -p "请输入可用的 serverName 列表 (默认为 www.gov.hk): " user_input
     
-    # 验证服务器是否支持TLS 1.3
     echo "正在验证服务器支持的TLS版本..." >&2
     
     if [[ -n "$user_input" ]]; then
@@ -1124,13 +1018,11 @@ function generate_server_name_config() {
     echo "$server_name"
 }
 
-# 目标网站配置
 function generate_target_server_config() {
     local target_server="www.gov.hk"
 
     read -p "请输入目标网站地址(默认为 www.gov.hk): " user_input
     
-    # 验证目标服务器是否支持TLS 1.3
     echo "正在验证服务器支持的TLS版本..." >&2
     
     if [[ -n "$user_input" ]]; then
@@ -1147,7 +1039,6 @@ function generate_target_server_config() {
     echo "$target_server"
 }
 
-# 私钥配置
 function generate_private_key_config() {
     local private_key
 
@@ -1161,7 +1052,6 @@ function generate_private_key_config() {
             break
         fi
 
-        # 验证私钥格式是否正确
         if openssl pkey -inform PEM -noout -text -in <(echo "$private_key") >/dev/null 2>&1; then
             break
         else
@@ -1172,7 +1062,6 @@ function generate_private_key_config() {
     echo "$private_key"
 }
 
-# ShortIds 配置
 function generate_short_ids_config() {
     local short_ids=()
     local add_more_short_ids="y"
@@ -1188,7 +1077,7 @@ function generate_short_ids_config() {
         short_ids+=("$short_id")
 
         while true; do
-            read -p "是否继续添加 shortId？(y/n，默认为 n): " add_more_short_ids
+            read -p "是否继续添加 shortId？(Y/N，默认为 N): " add_more_short_ids
             add_more_short_ids=${add_more_short_ids:-n}
             case $add_more_short_ids in
                 [yY])
@@ -1210,13 +1099,12 @@ function generate_short_ids_config() {
         fi
     done
 
-    local short_ids_config=$(printf '          "%s",\n' "${short_ids[@]}")
+    local short_ids_config=$(printf '            "%s",\n' "${short_ids[@]}")
     short_ids_config=${short_ids_config%,}  
 
     echo "$short_ids_config"
 }
 
-# 流控配置
 function generate_flow_config() {
     local flow_type="$1"
     local transport_config=""
@@ -1260,7 +1148,6 @@ function generate_flow_config() {
     echo "$transport_config"
 }
 
-# 用户配置
 function generate_user_config() {
     local flow_type="$1"
     local users=()
@@ -1291,7 +1178,7 @@ function generate_user_config() {
         },')
 
         while true; do
-            read -p "是否继续添加用户？(y/n，默认为 n): " add_more_users
+            read -p "是否继续添加用户？(Y/N，默认为 N): " add_more_users
             add_more_users=${add_more_users:-n}
             case $add_more_users in
                 [yY])
@@ -1314,7 +1201,6 @@ function generate_user_config() {
     echo "${users[*]}"
 }
 
-# 创建 Direct 配置文件
 function Direct_write_config_file() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1354,7 +1240,6 @@ function Direct_write_config_file() {
     echo "配置文件 $config_file 写入成功。"
 }
 
-# 创建 shadowsocks 配置文件
 function ss_write_sing_box_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1389,7 +1274,6 @@ function ss_write_sing_box_config() {
     echo "配置文件 $config_file 创建成功。"
 }
 
-# 创建 Caddy 配置文件
 function create_caddy_config() {
     local config_file="/usr/local/etc/caddy/caddy.json"
 
@@ -1482,7 +1366,6 @@ function create_caddy_config() {
     echo "配置文件 $config_file 写入成功。"
 }
 
-# 创建 tuic 配置文件
 function generate_tuic_config() {
     local config_file="/usr/local/etc/tuic/config.json"
     local users=""
@@ -1502,7 +1385,6 @@ function generate_tuic_config() {
     private_key_path="$private_key_path"
     set_congestion_control
 
-    # 生成tuic配置文件
     echo "{
     \"server\": \"[::]:$listen_port\",
     \"users\": {
@@ -1527,7 +1409,6 @@ $users
 }" > "$config_file"
 }
 
-# 创建 Hysteria 配置文件
 function generate_Hysteria_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local certificate=""
@@ -1587,7 +1468,6 @@ function generate_Hysteria_config() {
 }" > "$config_file"
 }
 
-# 创建 shadowtls 配置文件
 function configure_shadowtls_config_file() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1652,11 +1532,11 @@ function configure_shadowtls_config_file() {
 }" | jq '.' > "$config_file"
 }
 
-# 创建 reality 配置文件
 function generate_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
-    local listen_port=$(generate_listen_port)
+    local listen_port_output=$(set_listen_port)
+    local listen_port=$(echo "$listen_port_output" | grep -oP '\d+$')
     local flow_type=$(select_flow_type)
 
     transport_config=$(generate_flow_config "$flow_type")
@@ -1668,56 +1548,55 @@ function generate_reality_config() {
     local private_key=$(generate_private_key_config)
     local short_ids=$(generate_short_ids_config)
 
-    # 生成 Sing-Box 配置文件
-    local config_content='{
-  "log": {
-    "disabled": false,
-    "level": "info",
-    "timestamp": true
+    local config_content="{
+  \"log\": {
+    \"disabled\": false,
+    \"level\": \"info\",
+    \"timestamp\": true
   },
-  "inbounds": [
+  \"inbounds\": [
     {
-      "type": "vless",
-      "tag": "vless-in",
-      "listen": "::",
-      "listen_port": '$listen_port',
-      "users": ['"$users"'
-      ],'"$transport_config"'
-      "tls": {
-        "enabled": true,
-        "server_name": "'"$server_name"'",
-        "reality": {
-          "enabled": true,
-          "handshake": {
-            "server": "'"$target_server"'",
-            "server_port": 443
+      \"type\": \"vless\",
+      \"tag\": \"vless-in\",
+      \"listen\": \"::\",
+      \"listen_port\": $listen_port,
+      \"users\": [$users
+      ],$transport_config
+      \"tls\": {
+        \"enabled\": true,
+        \"server_name\": \"$server_name\",
+        \"reality\": {
+          \"enabled\": true,
+          \"handshake\": {
+            \"server\": \"$target_server\",
+            \"server_port\": 443
           },
-          "private_key": "'"$private_key"'",
-          "short_id": [
-'"$short_ids"'
+          \"private_key\": \"$private_key\",
+          \"short_id\": [
+$short_ids
           ]
         }
       }
     }
   ],
-  "outbounds": [
+  \"outbounds\": [
     {
-      "type": "direct",
-      "tag": "direct"
+      \"type\": \"direct\",
+      \"tag\": \"direct\"
     },
     {
-      "type": "block",
-      "tag": "block"
+      \"type\": \"block\",
+      \"tag\": \"block\"
     }
   ]
-}'
+}"
 
     echo "$config_content" > "$config_file"
-
-    echo "Sing-Box 配置文件已生成并保存至 $config_file"       
+    echo "Sing-Box 配置文件已生成并保存至 $config_file"
+    
+    check_firewall_configuration       
 }
 
-# 显示 Reality 配置信息
 function display_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1752,7 +1631,6 @@ function display_reality_config() {
        echo -e "${CYAN}==================================================================${NC}" 
 }
 
-# 显示 TUIC 配置信息
 function display_tuic_config() {
     local config_file="/usr/local/etc/tuic/config.json"
 
@@ -1769,7 +1647,6 @@ echo -e "${CYAN}----------------------------------------------------------------
 echo -e "${CYAN}==================================================================${NC}"    
 }
 
-# 显示 Hysteria 配置信息
 function display_Hysteria_config_info() {
 
     echo -e "${CYAN}Hysteria 节点配置信息：${NC}"
@@ -1791,7 +1668,6 @@ function display_Hysteria_config_info() {
     echo -e "${CYAN}==================================================================${NC}"  
 }
 
-# 显示 ShadowTLS 配置信息
 function display_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1807,7 +1683,6 @@ done
     echo -e "${CYAN}================================================================${NC}"
 }
 
-# 显示 Direct 配置信息
 function Direct_extract_config_info() {
     local local_ip
     local_ip=$(curl -s http://ifconfig.me)
@@ -1824,7 +1699,6 @@ function Direct_extract_config_info() {
     echo -e "${CYAN}================================================================${NC}"
 }
 
-# 显示 Shadowsocks 配置信息
 function Shadowsocks_extract_config_info() {
     local local_ip
     local_ip=$(curl -s http://ifconfig.me)
@@ -1841,7 +1715,6 @@ function Shadowsocks_extract_config_info() {
     echo -e "${CYAN}================================================================${NC}"
 }
 
-# 显示 NaiveProxy 配置信息
 function NaiveProxy_extract_config_info() {
 
     echo -e "${CYAN}NaiveProxy 节点配置信息：${NC}"
@@ -1856,7 +1729,6 @@ function NaiveProxy_extract_config_info() {
     echo -e "${CYAN}================================================================${NC}"
 }
 
-# 重启 sing-box 服务
 function restart_sing_box_service() {
     echo "重启 sing-box 服务..."
     systemctl restart sing-box
@@ -1870,7 +1742,6 @@ function restart_sing_box_service() {
     systemctl status sing-box
 }
 
-# 重启 naiveproxy 服务
 function restart_naiveproxy_service() {
     echo "重启 naiveproxy 服务..."
     systemctl reload caddy
@@ -1884,7 +1755,6 @@ function restart_naiveproxy_service() {
     systemctl status caddy
 }
 
-# 重启 TUIC
 function restart_tuic() {
     echo "重启 TUIC 服务..."
     systemctl restart tuic.service
@@ -1898,10 +1768,10 @@ function restart_tuic() {
     systemctl status tuic.service   
 }
 
-# 卸载 sing-box
 function uninstall_sing_box() {
     echo "开始卸载 sing-box..."
     systemctl stop sing-box
+    systemctl disable sing-box
     rm -rf /usr/local/bin/sing-box
     rm -rf /usr/local/etc/sing-box
     rm -rf /etc/systemd/system/sing-box.service
@@ -1909,7 +1779,6 @@ function uninstall_sing_box() {
     echo "sing-box 卸载完成。"
 }
 
-# 卸载 NaiveProxy
 function uninstall_naiveproxy() {
     echo "开始卸载 NaiveProxy..."
     systemctl stop caddy
@@ -1921,7 +1790,6 @@ function uninstall_naiveproxy() {
     echo "NaiveProxy 卸载完成。"
 }
 
-# 卸载 TUIC
 function uninstall_tuic() {
     echo "卸载 TUIC 服务..."
     systemctl stop tuic.service
@@ -1932,9 +1800,8 @@ function uninstall_tuic() {
     echo "TUIC 服务已卸载..."
 }
 
-# 安装 Direct 
 function Direct_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     select_sing_box_install_option
     configure_sing_box_service
@@ -1949,9 +1816,8 @@ function Direct_install() {
     Direct_extract_config_info
 }
 
-# 安装 Shadowsocks 
 function Shadowsocks_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     select_sing_box_install_option
     configure_sing_box_service
@@ -1965,9 +1831,8 @@ function Shadowsocks_install() {
     Shadowsocks_extract_config_info
 }
 
-# 安装 NaiveProxy
 function NaiveProxy_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     install_go
     install_caddy
@@ -1988,9 +1853,8 @@ function NaiveProxy_install() {
     NaiveProxy_extract_config_info
 }
 
-# 安装 TUIC
 function tuic_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     create_tuic_directory   
     download_tuic
@@ -2005,9 +1869,8 @@ function tuic_install() {
     display_tuic_config
 }
 
-# 安装 Hysteria
 function Hysteria_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     select_sing_box_install_option      
     check_sing_box_folder
@@ -2021,9 +1884,8 @@ function Hysteria_install() {
     display_Hysteria_config_info
 }
 
-# 安装 shadowtls
 function shadowtls_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     select_sing_box_install_option      
     check_sing_box_folder
@@ -2036,14 +1898,12 @@ function shadowtls_install() {
     display_shadowtls_config
 }
 
-# 安装 reality
 function reality_install() {
-    install_dependencies
+    configure_dns64
     enable_bbr
     select_sing_box_install_option      
     check_sing_box_folder    
-    generate_reality_config   
-    check_firewall_configuration          
+    generate_reality_config            
     configure_sing_box_service    
     systemctl daemon-reload
     systemctl enable sing-box
@@ -2051,11 +1911,12 @@ function reality_install() {
     display_reality_config
 }
 
-# 主函数
 function main_menu() {
         echo -e "${CYAN}               ------------------------------------------------------------------------------------ ${NC}"
         echo -e "${CYAN}               |                          欢迎使用 Mr. xiao 安装脚本                              |${NC}"
         echo -e "${CYAN}               |                      项目地址:https://github.com/TinrLin                         |${NC}"
+        echo -e "${CYAN}               |                 YouTube频道地址:https://youtube.com/@Mr_xiao502                  |${NC}" 
+        echo -e "${CYAN}               |                             转载请注明出处，谢谢！                               |${NC}"       
         echo -e "${CYAN}               ------------------------------------------------------------------------------------${NC}"
         echo -e "${CYAN}请选择要执行的操作：${NC}"
         echo -e "  ${CYAN}[01]. TUIC V5${NC}"         
