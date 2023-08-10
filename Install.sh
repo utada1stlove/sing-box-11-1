@@ -216,8 +216,7 @@ function install_go() {
         esac
 
         local go_version
-        go_version=$(wget -qO- "https://golang.org/VERSION?m=text" | grep -o 'go[0-9.]\+')
-        local go_download_url="https://go.dev/dl/$go_version.linux-$go_arch.tar.gz"
+        local go_download_url="https://go.dev/dl/go1.20.7.linux-$go_arch.tar.gz"
 
         wget -qO- "$go_download_url" | tar -xz -C /usr/local
         echo 'export PATH=$PATH:/usr/local/go/bin' |  tee -a /etc/profile >/dev/null
