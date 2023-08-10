@@ -7,11 +7,11 @@
 # **Installation**
 ```
 #Debian&&Ubuntu
-apt update && apt -y install curl
+apt update && apt -y install curl wget tar socat jq git openssl uuid-runtime build-essential zlib1g-dev libssl-dev libevent-dev
 ```
 ```
 #CentOS
-yum update && yum -y install curl
+yum update && yum -y install curl wget tar socat jq git openssl util-linux gcc-c++ zlib-devel openssl-devel libevent-devel
 ```
 ```
 bash <(curl -L https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh)
