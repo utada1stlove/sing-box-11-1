@@ -1,8 +1,8 @@
 # **Description**
 ### This script supports vps of IPV6 single-stack network.
 ### The script supports CentOS 8+, Debian 10+, Ubuntu 20+ operating systems.
-### This script supports Vless, Hysteria, Direct, ShadowTLS, Shadowsocks, TUIC, and NaiveProxy protocols.
-### Nodes of Vless, Hysteria, Direct, ShadowTLS, and Shadowsocks protocols are deployed using sing-box, and TUIC and NaiveProxy nodes are deployed using official programs.
+### This script supports Vless, Hysteria, Direct, Trojan, ShadowTLS, Shadowsocks, TUIC, and NaiveProxy protocols.
+### Nodes of Vless, Hysteria, Direct, trojan, ShadowTLS, and Shadowsocks protocols are deployed using sing-box, and TUIC and NaiveProxy nodes are deployed using official programs.
 ### All codes are from official documentation;The script is completely open source,you can use it with confidence!
 
 # **Installation**
@@ -23,6 +23,8 @@ bash <(curl -L https://raw.githubusercontent.com/TinrLin/script_installation/mai
 - **Vless+h2+Reality**
 - **Vless+gRPC+Reality**
 - **Direct tunnel server**
+- **Trojan+tcp+tls+web**
+- **Trojan+ws+tls+(CDN)**
 - **Hysteria**
 - **ShadowTLS V3**
 - **NaiveProxy**
