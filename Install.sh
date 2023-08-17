@@ -2314,9 +2314,9 @@ function trojan_install() {
     prompt_additional_users    
     prompt_port
     prompt_fake_domain
-    prompt_and_check_bound_domain  
-    generate_and_write_config  
+    prompt_and_check_bound_domain 
     transport_and_fallback_config=$(prompt_and_generate_transport_config) 
+    generate_and_write_config  
     check_firewall_configuration
     test_caddy_config
     generate_trojan_config
