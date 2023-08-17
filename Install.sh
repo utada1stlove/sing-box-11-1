@@ -2320,8 +2320,11 @@ function trojan_install() {
     check_firewall_configuration
     test_caddy_config
     generate_trojan_config
-    check_firewall_configuration   
-    systemctl enable sing-box   
+    check_firewall_configuration 
+    systemctl daemon-reload
+    systemctl enable caddy
+    systemctl enable sing-box 
+    systemctl start caddy
     systemctl start sing-box
     display_trojan_config
 }
