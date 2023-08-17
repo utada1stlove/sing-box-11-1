@@ -47,80 +47,100 @@ function check_firewall_configuration() {
     echo "检查防火墙配置..."
     case $firewall in
         ufw)
-            if ! ufw status | grep -q "Status: active"; then
-                ufw enable
+            if ! ufw status | grep -q "Status: active" > /dev/null 2>&1; then
+                ufw enable > /dev/null
             fi
 
-            if ! ufw status | grep -q " $listen_port"; then
-                ufw allow "$listen_port"
+            if ! ufw status | grep -q " $listen_port" > /dev/null 2>&1; then
+                ufw allow "$listen_port" > /dev/null
             fi
 
-            if ! ufw status | grep -q " $override_port"; then
-                ufw allow "$override_port"
+            if ! ufw status | grep -q " $override_port" > /dev/null 2>&1; then
+                ufw allow "$override_port" > /dev/null
             fi
 
-            if ! ufw status | grep -q " 80"; then
-                ufw allow 80
+            if ! ufw status | grep -q " $fallback_port" > /dev/null 2>&1; then
+                ufw allow "$fallback_port" > /dev/null
             fi
-            ufw reload
+            
+            if ! ufw status | grep -q " 80" > /dev/null 2>&1; then
+                ufw allow 80 > /dev/null
+            fi
+            ufw reload > /dev/null
 
             echo "防火墙配置已更新。"
             ;;
        iptables)
             if ! iptables -C INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT
+                iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$listen_port" -j ACCEPT
+                iptables -A INPUT -p udp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p tcp --dport "$override_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$override_port" -j ACCEPT
+                iptables -A INPUT -p tcp --dport "$override_port" -j ACCEPT >/dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport "$override_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$override_port" -j ACCEPT
+                iptables -A INPUT -p udp --dport "$override_port" -j ACCEPT >/dev/null 2>&1
             fi
 
+            if ! iptables -C INPUT -p tcp --dport "$fallback_port" -j ACCEPT >/dev/null 2>&1; then
+                iptables -A INPUT -p tcp --dport "$fallback_port" -j ACCEPT >/dev/null 2>&1
+            fi
+
+            if ! iptables -C INPUT -p udp --dport "$port" -j ACCEPT >/dev/null 2>&1; then
+                iptables -A INPUT -p udp --dport "$port" -j ACCEPT >/dev/null 2>&1
+            fi
+            
             if ! iptables -C INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+                iptables -A INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport 80 -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport 80 -j ACCEPT
+                iptables -A INPUT -p udp --dport 80 -j ACCEPT >/dev/null 2>&1
             fi
 
-            iptables-save > /etc/sysconfig/iptables
+            iptables-save > /etc/sysconfig/iptables > /dev/null 2>&1
 
             echo "iptables防火墙配置已更新。"
             ;;
         firewalld)
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp"; then
-                firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/udp"; then
-                firewall-cmd --zone=public --add-port="$listen_port/udp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/udp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port="$listen_port/udp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/tcp"; then
-                firewall-cmd --zone=public --add-port="$override_port/tcp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/tcp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port="$override_port/tcp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/udp"; then
-                firewall-cmd --zone=public --add-port="$override_port/udp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/udp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port="$override_port/udp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "80/tcp"; then
-                firewall-cmd --zone=public --add-port=80/tcp --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/tcp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port="$fallback_port/tcp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "80/udp"; then
-                firewall-cmd --zone=public --add-port=80/udp --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/udp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port="$fallback_port/udp" --permanent > /dev/null 2>&1
+            fi
+            
+            if ! firewall-cmd --zone=public --list-ports | grep -q "80/tcp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port=80/tcp --permanent > /dev/null 2>&1
             fi
 
-            firewall-cmd --reload
+            if ! firewall-cmd --zone=public --list-ports | grep -q "80/udp" > /dev/null 2>&1; then
+                firewall-cmd --zone=public --add-port=80/udp --permanent > /dev/null 2>&1
+            fi
+
+            firewall-cmd --reload > /dev/null 2>&1
 
             echo "firewalld防火墙配置已更新。"
             ;;
@@ -295,6 +315,49 @@ function install_latest_sing_box() {
         echo -e "${RED}无法获取 Sing-Box 的下载 URL。${NC}"
         return 1
     fi
+}
+
+function install_latest_caddy() {
+    local architecture=$(uname -m)
+
+    case "$architecture" in
+        "x86_64"|"amd64")
+            architecture="amd64"
+            ;;
+        "i686"|"i386")
+            architecture="386"
+            ;;
+        "aarch64"|"arm64")
+            architecture="arm64"
+            ;;
+        "armv5tel")
+            architecture="armv5"
+            ;;
+        "armv6l")
+            architecture="armv6"
+            ;;
+        "armv7l")
+            architecture="armv7"
+            ;;
+        "s390x")
+            architecture="s390"
+            ;;
+        *)
+            echo "Unsupported architecture: $architecture"
+            exit 1
+            ;;
+    esac
+
+    local latest_version=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep -o '"tag_name": "v.*"' | cut -d'"' -f4)
+    local download_url="https://github.com/caddyserver/caddy/releases/download/$latest_version/caddy_${latest_version:1}_linux_$architecture.tar.gz"
+
+    echo "正在下载 Caddy $latest_version 版本..."
+    wget -q -O caddy.tar.gz $download_url
+    tar -xf caddy.tar.gz -C /usr/local/bin/
+    chmod +x /usr/local/bin/caddy
+    rm caddy.tar.gz
+    
+    echo "Caddy安装完成。"
 }
 
 function install_caddy() {
@@ -602,7 +665,7 @@ function test_caddy_config() {
         echo -e "${RED}Caddy 配置测试未通过，请检查配置文件${NC}"
         echo "$output" | grep -i "error" --color=always 
     else
-        echo "Caddy 配置测试通过"
+        echo "Caddy 配置测试通过。"
     fi
 }
 
@@ -1200,6 +1263,160 @@ function generate_user_config() {
     echo "${users[*]}"
 }
 
+function prompt_setup_type() {
+    while true; do
+        echo "请选择传输层协议："
+        echo "  [1]. TCP（trojan+tcp+tls+web）"
+        echo "  [2]. ws（trojan+ws+tls+CDN）"
+
+        read -p "请选择 [1-2]: " setup_type
+
+        case $setup_type in
+            1)
+                transport_removed=true
+                fallback_removed=false
+                break
+                ;;
+            2)
+                transport_removed=false
+                fallback_removed=true
+                break
+                ;;
+            *)
+                echo -e "${RED}无效的选择，请重新输入!${NC}"
+                ;;
+        esac
+    done
+}
+
+function prompt_port() {
+  read -p "请输入web伪装监听端口 (默认8080): " fallback_port
+  fallback_port=${fallback_port:-8080}  
+
+  if ! [[ "$fallback_port" =~ ^[0-9]+$ ]] || ((fallback_port < 1 || fallback_port > 65535)); then
+    echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}"
+    prompt_port
+  fi
+}
+
+function prompt_fake_domain() {
+  read -p "请输入伪装网址 (默认www.fan-2000.com): " input_fake_domain
+  fake_domain=${input_fake_domain:-www.fan-2000.com}  
+
+  if [[ "$fake_domain" != "www.fan-2000.com" ]]; then
+    response_code=$(curl -s -o /dev/null -w "%{http_code}" -I "https://$fake_domain")
+    if [ "$response_code" -ne 200 ]; then
+     echo -e "${RED}错误：伪装网址无效或不可用，请重新输入。${NC}"
+      prompt_fake_domain
+    fi
+  fi
+}
+
+function prompt_and_check_bound_domain() {
+  read -p "请输入域名（用于自动申请证书）: " input_domain
+
+  local_ip=$(hostname -I | awk '{print $1}')
+  resolved_ip=$(dig +short "$input_domain")
+
+  if [[ "$resolved_ip" != "$local_ip" ]]; then
+    echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
+    prompt_and_check_bound_domain
+  else
+    domain="$input_domain"
+  fi
+}
+
+function prompt_password() {
+  read -p "请输入用户密码 (默认随机生成): " password_input
+
+  if [[ -z "$password_input" ]]; then
+    password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
+  else
+    password="$password_input"
+  fi
+
+  if [[ -z "$password" ]]; then
+    echo -e "${RED}错误：密码不能为空。${NC}"
+    prompt_password
+  fi
+}
+
+function prompt_additional_users() {
+  read -p "是否添加多用户？(Y/N，默认N): " additional_users_input
+
+  case "$additional_users_input" in
+    [Yy])
+      while true; do
+        read -p "请输入密码 (回车生成随机密码): " user_password_input
+        if [[ -z "$user_password_input" ]]; then
+          user_password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
+        else
+          user_password="$user_password_input"
+        fi
+
+        if [[ -z "$user_password" ]]; then
+          echo -e "${RED}错误：密码不能为空。${NC}"
+          continue
+        fi
+
+        if [[ -z "$users" ]]; then
+          users+=",
+        {
+          \"password\": \"$user_password\"
+        }"
+        else
+          users+=",
+        {
+          \"password\": \"$user_password\"
+        }"
+        fi
+
+        read -p "是否继续添加用户？(Y/N，默认N): " continue_add_input
+        case "$continue_add_input" in
+          [Nn]|"")
+            break
+            ;;
+          *)
+            continue
+            ;;
+        esac
+      done
+      ;;
+    [Nn]|"")
+      ;;
+    *)
+       echo -e "${RED}无效的选择，请输入 Y 或 N。${NC}"
+      prompt_additional_users
+      ;;
+  esac
+}
+
+function prompt_and_generate_transport_config() {
+    if [[ $setup_type == 2 ]]; then
+        read -p "请输入 ws 路径 (默认随机生成): " transport_path_input
+        transport_path=${transport_path_input:-/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)}
+
+        if [[ ! "$transport_path" =~ ^/ ]]; then
+            transport_path="/$transport_path"
+        fi
+
+        echo ",
+      \"transport\": {
+        \"type\": \"ws\",
+        \"path\": \"$transport_path\"
+      }"
+    fi
+
+    if [[ $setup_type == 1 ]]; then
+        h1h2c_port=$(grep -oE '"listen": \["127.0.0.1:[0-9]+"],' /usr/local/etc/caddy/caddy.json | cut -d':' -f3 | tr -d '",[]' | head -n 1)
+        echo ",
+      \"fallback\": {
+        \"server\": \"127.0.0.1\",
+        \"server_port\": $h1h2c_port
+      }"
+    fi
+}
+
 function Direct_write_config_file() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1596,6 +1813,142 @@ $short_ids
     check_firewall_configuration       
 }
 
+function generate_and_write_config() {
+  caddy_config="{
+  \"logging\": {
+    \"logs\": {
+      \"default\": {
+        \"writer\": {
+          \"output\": \"file\",
+          \"filename\": \"/var/log/caddy.log\"
+        },
+        \"level\": \"WARN\"
+      }
+    }
+  },
+  \"storage\": {
+    \"module\": \"file_system\",
+    \"root\": \"/etc/ssl\"
+  },
+  \"apps\": {
+    \"http\": {
+      \"servers\": {
+        \"h1\": {
+          \"listen\": [\":80\"],
+          \"routes\": [{
+            \"handle\": [{
+              \"handler\": \"static_response\",
+              \"headers\": {
+                \"Location\": [\"https://{http.request.host}{http.request.uri}\"]
+              },
+              \"status_code\": 301
+            }]
+          }],
+          \"protocols\": [\"h1\"]
+        },
+        \"h1h2c\": {
+          \"listen\": [\"127.0.0.1:$fallback_port\"],
+          \"routes\": [{
+            \"handle\": [
+              {
+                \"handler\": \"headers\",
+                \"response\": {
+                  \"set\": {
+                    \"Strict-Transport-Security\": [\"max-age=31536000; includeSubDomains; preload\"]
+                  }
+                }
+              },
+              {
+                \"handler\": \"reverse_proxy\",
+                \"headers\": {
+                  \"request\": {
+                    \"set\": {
+                      \"Host\": [\"{http.reverse_proxy.upstream.hostport}\"],
+                      \"X-Forwarded-Host\": [\"{http.request.host}\"]
+                    }
+                  }
+                },
+                \"transport\": {
+                  \"protocol\": \"http\",
+                  \"tls\": {}
+                },
+                \"upstreams\": [{\"dial\": \"$fake_domain:443\"}]
+              }
+            ]
+          }],
+          \"protocols\": [\"h1\",\"h2c\"]
+        }
+      }
+    },
+    \"tls\": {
+      \"certificates\": {
+        \"automate\": [\"$domain\"]
+      },
+      \"automation\": {
+        \"policies\": [{
+          \"issuers\": [{
+            \"module\": \"acme\"
+          }]
+        }]
+      }
+    }
+  }
+}"
+
+  echo "$caddy_config" > /usr/local/etc/caddy/caddy.json
+  echo "Caddy配置文件创建成功。"
+}
+
+function generate_trojan_config() {
+  server_name=$(grep -oE '"automate": \["[^"]+"' /usr/local/etc/caddy/caddy.json | cut -d'"' -f4)
+
+ sing_box_config="{
+  \"log\": {
+    \"disabled\": false,
+    \"level\": \"info\",
+    \"timestamp\": true
+  },
+  \"inbounds\": [
+    {
+      \"type\": \"trojan\",
+      \"tag\": \"trojan-in\",
+      \"listen\": \"::\",
+      \"listen_port\": $listen_port,
+      \"sniff\": true,
+      \"sniff_override_destination\": true,
+      \"users\": [
+        {
+          \"password\": \"$password\"
+        }$users
+      ],
+      \"tls\": {
+        \"enabled\": true,
+        \"server_name\": \"$server_name\",
+        \"alpn\": [
+          \"h2\",
+          \"http/1.1\"
+        ],
+        \"certificate_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/$server_name/$server_name.crt\",
+        \"key_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/$server_name/$server_name.key\"
+      }$transport_and_fallback_config
+    }
+  ],
+  \"outbounds\": [
+    {
+      \"type\": \"direct\",
+      \"tag\": \"direct\"
+    },
+    {
+      \"type\": \"block\",
+      \"tag\": \"block\"
+    }
+  ]
+}"
+
+    echo "$sing_box_config" > /usr/local/etc/sing-box/config.json
+    echo "sing-box配置文件创建成功。"
+}
+
 function display_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1628,6 +1981,39 @@ function display_reality_config() {
         echo -e "${CYAN}------------------------------------------------------------------${NC}"  
         echo "PublicKey: $public_key"
        echo -e "${CYAN}==================================================================${NC}" 
+}
+
+function display_trojan_config() {
+  config_file="/usr/local/etc/sing-box/config.json"
+
+  server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+  listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+  passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
+  password_list=""
+  for password in "${passwords[@]}"; do
+      password_list+="\n$password"
+  done
+  alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
+  transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+  transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
+
+  echo -e "${CYAN}trojan 节点配置信息：${NC}"
+  echo -e "${CYAN}==================================================================${NC}" 
+  echo "地址: $server_name"
+  echo -e "${CYAN}------------------------------------------------------------------${NC}"
+  echo "监听端口: $listen_port"
+  echo -e "${CYAN}------------------------------------------------------------------${NC}"
+  echo -e "密码:$password_list"
+  echo -e "${CYAN}------------------------------------------------------------------${NC}"
+  echo "ALPN: $alpn"
+  echo -e "${CYAN}------------------------------------------------------------------${NC}"
+  if [ "$transport_type" != "null" ]; then
+    echo "传输协议: $transport_type"
+    echo "路径: $transport_path"
+  else
+    echo "传输协议: tcp"
+  fi
+  echo -e "${CYAN}==================================================================${NC}" 
 }
 
 function display_tuic_config() {
@@ -1910,6 +2296,33 @@ function reality_install() {
     display_reality_config
 }
 
+function trojan_install() {
+    configure_dns64
+    enable_bbr
+    check_sing_box_folder
+    check_caddy_folder
+    select_sing_box_install_option
+    configure_sing_box_service
+    install_latest_caddy
+    configure_caddy_service
+    prompt_setup_type
+    set_listen_port
+    prompt_password
+    prompt_additional_users    
+    prompt_port
+    prompt_fake_domain
+    prompt_and_check_bound_domain  
+    transport_and_fallback_config=$(prompt_and_generate_transport_config)  
+    generate_and_write_config    
+    check_firewall_configuration
+    test_caddy_config
+    generate_trojan_config
+    check_firewall_configuration   
+    systemctl enable sing-box   
+    systemctl start sing-box
+    display_trojan_config
+}
+
 function main_menu() {
         echo -e "${CYAN}               ------------------------------------------------------------------------------------ ${NC}"
         echo -e "${CYAN}               |                          欢迎使用 Mr. xiao 安装脚本                              |${NC}"
@@ -1920,21 +2333,22 @@ function main_menu() {
         echo -e "${CYAN}请选择要执行的操作：${NC}"
         echo -e "  ${CYAN}[01]. TUIC V5${NC}"         
         echo -e "  ${CYAN}[02]. Vless${NC}"
-        echo -e "  ${CYAN}[03]. Direct${NC}" 
-        echo -e "  ${CYAN}[04]. Hysteria${NC}"                   
-        echo -e "  ${CYAN}[05]. ShadowTLS V3${NC}"
-        echo -e "  ${CYAN}[06]. NaiveProxy${NC}"            
-        echo -e "  ${CYAN}[07]. Shadowsocks${NC}"
-        echo -e "  ${CYAN}[08]. 重启   TUIC   服务${NC}"
-        echo -e "  ${CYAN}[09]. 重启   Caddy  服务${NC}"
-        echo -e "  ${CYAN}[10]. 重启 sing-box 服务${NC}"
-        echo -e "  ${CYAN}[11]. 卸载   TUIC   服务${NC}"
-        echo -e "  ${CYAN}[12]. 卸载   Caddy  服务${NC}"
-        echo -e "  ${CYAN}[13]. 卸载 sing-box 服务${NC}"
+        echo -e "  ${CYAN}[03]. Direct${NC}"
+        echo -e "  ${CYAN}[04]. Trojan${NC}"
+        echo -e "  ${CYAN}[05]. Hysteria${NC}"                   
+        echo -e "  ${CYAN}[06]. ShadowTLS V3${NC}"
+        echo -e "  ${CYAN}[07]. NaiveProxy${NC}"            
+        echo -e "  ${CYAN}[08]. Shadowsocks${NC}"
+        echo -e "  ${CYAN}[09]. 重启   TUIC   服务${NC}"
+        echo -e "  ${CYAN}[10]. 重启   Caddy  服务${NC}"
+        echo -e "  ${CYAN}[11]. 重启 sing-box 服务${NC}"
+        echo -e "  ${CYAN}[12]. 卸载   TUIC   服务${NC}"
+        echo -e "  ${CYAN}[13]. 卸载   Caddy  服务${NC}"
+        echo -e "  ${CYAN}[14]. 卸载 sing-box 服务${NC}"
         echo -e "  ${CYAN}[00]. 退出脚本${NC}"
 
         local choice
-        read -p "请选择 [0-13]: " choice
+        read -p "请选择 [0-14]: " choice
 
         case $choice in
             1)
@@ -1947,34 +2361,37 @@ function main_menu() {
                 Direct_install
                 ;;
             4)
+                trojan_install
+                ;;                
+            5)
                 Hysteria_install
                 ;;
-            5)
+            6)
                 shadowtls_install
                 ;;
-            6)
+            7)
                 NaiveProxy_install
                 ;;
-            7)
+            8)
                 Shadowsocks_install
                 ;;                
-            8)
+            9)
                 restart_tuic
                 ;;
 
-            9)
+            10)
                 restart_naiveproxy_service
                 ;;
-            10)
+            11)
                 restart_sing_box_service
                 ;;
-            11)
+            12)
                 uninstall_tuic
                 ;;
-            12)
+            13)
                 uninstall_naiveproxy
                 ;;
-            13)
+            14)
                 uninstall_sing_box
                 ;;         
             0)
