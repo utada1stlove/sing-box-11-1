@@ -1316,10 +1316,11 @@ function prompt_and_check_bound_domain() {
   read -p "请输入域名（用于自动申请证书）: " input_domain
 
   local_ip=$(hostname -I | awk '{print $1}')
-  resolved_ip=$(dig +short "$input_domain")
+  resolved_ipv4=$(dig +short A "$input_domain")
+  resolved_ipv6=$(dig +short AAAA "$input_domain")
 
-  if [[ "$resolved_ip" != "$local_ip" ]]; then
-    echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
+  if [[ "$resolved_ipv4" != "$local_ip" && "$resolved_ipv6" != "$local_ip" ]]; then
+    echo "错误：域名未绑定本机IP，请重新输入。"
     prompt_and_check_bound_domain
   else
     domain="$input_domain"
