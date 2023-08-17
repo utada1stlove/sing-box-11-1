@@ -353,8 +353,8 @@ function install_latest_caddy() {
 
     echo "正在下载 Caddy $latest_version 版本..."
     wget -q -O caddy.tar.gz $download_url
-    tar -xf caddy.tar.gz -C /usr/local/bin/
-    chmod +x /usr/local/bin/caddy
+    tar -xf caddy.tar.gz -C /usr/bin/
+    chmod +x /usr/bin/caddy
     rm caddy.tar.gz
     
     echo "Caddy安装完成。"
