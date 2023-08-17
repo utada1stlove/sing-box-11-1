@@ -1316,7 +1316,7 @@ function prompt_and_check_bound_domain() {
   read -p "请输入域名（用于自动申请证书）: " input_domain
 
   local_ip_v4=$(hostname -I | awk '{print $1}')
-  local_ip_v6=$(ip -o -6 addr show scope global | awk '{print $4; exit}')
+  local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
   
   resolved_ipv4=$(dig +short A "$input_domain")
   resolved_ipv6=$(dig +short AAAA "$input_domain")
