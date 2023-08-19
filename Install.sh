@@ -145,8 +145,8 @@ function enable_bbr() {
 function select_sing_box_install_option() {
     while true; do
         echo "请选择 sing-box 的安装方式："
-        echo "  [1]. 编译安装sing-box（支持全部功能）"
-        echo "  [2]. 下载安装sing-box（支持部分功能）"
+        echo "1). 编译安装sing-box（支持全部功能）"
+        echo "2). 下载安装sing-box（支持部分功能）"
 
         local install_option
         read -p "请选择 [1-2]: " install_option
