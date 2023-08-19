@@ -17,11 +17,11 @@ function configure_dns64() {
     fi
 
     if [[ -n $ipv6_address ]]; then
-        echo "检查到本机为 IPv6 单栈网络，配置 DNS64..."
+        echo "Check that the machine is IPv6 single-stack network, configure DNS64..."
         sed -i '/^nameserver /s/^/#/' /etc/resolv.conf 
         echo "nameserver 2001:67c:2b0::4" >> /etc/resolv.conf
         echo "nameserver 2001:67c:2b0::6" >> /etc/resolv.conf
-        echo "DNS64 配置完成。"
+        echo "DNS64 configuration is complete."
     fi
 }
 
@@ -45,107 +45,63 @@ function check_firewall_configuration() {
     fi
 
     echo "检查防火墙配置..."
+
     case $firewall in
         ufw)
+
+            local ports=("$listen_port" "$override_port" "$fallback_port" "80")
+
             if ! ufw status | grep -q "Status: active" > /dev/null 2>&1; then
                 ufw enable > /dev/null
             fi
 
-            if ! ufw status | grep -q " $listen_port" > /dev/null 2>&1; then
-                ufw allow "$listen_port" > /dev/null
-            fi
+            for port in "${ports[@]}"; do
+                if ! ufw status | grep -q " $port" > /dev/null 2>&1; then
+                    ufw allow "$port" > /dev/null
+                fi
+            done
 
-            if ! ufw status | grep -q " $override_port" > /dev/null 2>&1; then
-                ufw allow "$override_port" > /dev/null
-            fi
-
-            if ! ufw status | grep -q " $fallback_port" > /dev/null 2>&1; then
-                ufw allow "$fallback_port" > /dev/null
-            fi
-            
-            if ! ufw status | grep -q " 80" > /dev/null 2>&1; then
-                ufw allow 80 > /dev/null
-            fi
             ufw reload > /dev/null
-
             echo "防火墙配置已更新。"
             ;;
-       iptables)
-            if ! iptables -C INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1
-            fi
 
-            if ! iptables -C INPUT -p udp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1
-            fi
+        iptables)
 
-            if ! iptables -C INPUT -p tcp --dport "$override_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$override_port" -j ACCEPT >/dev/null 2>&1
-            fi
+            local port_protocols=("tcp" "udp")
+            local ports=("$listen_port" "$override_port" "$fallback_port" "80")
 
-            if ! iptables -C INPUT -p udp --dport "$override_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$override_port" -j ACCEPT >/dev/null 2>&1
-            fi
-
-            if ! iptables -C INPUT -p tcp --dport "$fallback_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$fallback_port" -j ACCEPT >/dev/null 2>&1
-            fi
-
-            if ! iptables -C INPUT -p udp --dport "$port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$port" -j ACCEPT >/dev/null 2>&1
-            fi
-            
-            if ! iptables -C INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1
-            fi
-
-            if ! iptables -C INPUT -p udp --dport 80 -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport 80 -j ACCEPT >/dev/null 2>&1
-            fi
+            for protocol in "${port_protocols[@]}"; do
+                for port in "${ports[@]}"; do
+                    if ! iptables -C INPUT -p "$protocol" --dport "$port" -j ACCEPT >/dev/null 2>&1; then
+                        iptables -A INPUT -p "$protocol" --dport "$port" -j ACCEPT >/dev/null 2>&1
+                    fi
+                done
+            done
 
             iptables-save > /etc/sysconfig/iptables > /dev/null 2>&1
-
             echo "iptables防火墙配置已更新。"
             ;;
+
         firewalld)
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent > /dev/null 2>&1
-            fi
+        
+            local ports=("$listen_port" "$override_port" "$fallback_port" "80")
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/udp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port="$listen_port/udp" --permanent > /dev/null 2>&1
-            fi
+            for port in "${ports[@]}"; do
+                if ! firewall-cmd --zone=public --list-ports | grep -q "$port/tcp" > /dev/null 2>&1; then
+                    firewall-cmd --zone=public --add-port="$port/tcp" --permanent > /dev/null 2>&1
+                fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/tcp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port="$override_port/tcp" --permanent > /dev/null 2>&1
-            fi
-
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/udp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port="$override_port/udp" --permanent > /dev/null 2>&1
-            fi
-
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/tcp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port="$fallback_port/tcp" --permanent > /dev/null 2>&1
-            fi
-
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/udp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port="$fallback_port/udp" --permanent > /dev/null 2>&1
-            fi
-            
-            if ! firewall-cmd --zone=public --list-ports | grep -q "80/tcp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port=80/tcp --permanent > /dev/null 2>&1
-            fi
-
-            if ! firewall-cmd --zone=public --list-ports | grep -q "80/udp" > /dev/null 2>&1; then
-                firewall-cmd --zone=public --add-port=80/udp --permanent > /dev/null 2>&1
-            fi
+                if ! firewall-cmd --zone=public --list-ports | grep -q "$port/udp" > /dev/null 2>&1; then
+                    firewall-cmd --zone=public --add-port="$port/udp" --permanent > /dev/null 2>&1
+                fi
+            done
 
             firewall-cmd --reload > /dev/null 2>&1
-
             echo "firewalld防火墙配置已更新。"
             ;;
     esac
 }
+
 
 function check_sing_box_folder() {
     local folder="/usr/local/etc/sing-box"
@@ -176,7 +132,7 @@ function create_tuic_directory() {
 
 function enable_bbr() {
     if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
-        echo "开启 BBR..."
+        echo "Enable BBR..."
         echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
         echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
         sysctl -p
@@ -236,7 +192,8 @@ function install_go() {
         esac
 
         local go_version
-        local go_download_url="https://go.dev/dl/go1.20.7.linux-$go_arch.tar.gz"
+        go_version=$(curl -sL "https://golang.org/VERSION?m=text" | grep -o 'go[0-9]\+\.[0-9]\+\.[0-9]\+')
+        local go_download_url="https://go.dev/dl/$go_version.linux-$go_arch.tar.gz"
 
         wget -qO- "$go_download_url" | tar -xz -C /usr/local
         echo 'export PATH=$PATH:/usr/local/go/bin' |  tee -a /etc/profile >/dev/null
@@ -272,9 +229,9 @@ github.com/sagernet/sing-box/cmd/sing-box@latest"
     if [[ $? -eq 0 ]]; then
         mv ~/go/bin/sing-box /usr/local/bin/
         chmod +x /usr/local/bin/sing-box
-        echo "sing-box 编译安装成功"
+        echo "sing-box 编译安装成功。"
     else
-        echo -e "${RED}sing-box 编译安装失败${NC}"
+        echo -e "${RED}sing-box 编译安装失败。${NC}"
         exit 1
     fi
 }
@@ -310,7 +267,7 @@ function install_latest_sing_box() {
         rm sing-box.tar.gz
         chmod +x /usr/local/bin/sing-box
 
-        echo "Sing-Box 安装成功！"
+        echo "Sing-Box 安装成功。"
     else
         echo -e "${RED}无法获取 Sing-Box 的下载 URL。${NC}"
         return 1
@@ -410,7 +367,6 @@ function download_tuic() {
     fi
 
     chmod +x /usr/local/bin/tuic
-
     echo "TUIC 程序下载并安装完成。"
 }
 
@@ -505,21 +461,47 @@ WantedBy=multi-user.target'
         echo "TUIC 开机自启动服务已配置。"
 }
 
-function set_listen_port() {
+function listen_port() {
     while true; do
         read -p "请输入监听端口 (默认443): " listen_port
         listen_port=${listen_port:-443}
 
         if [[ $listen_port =~ ^[1-9][0-9]{0,4}$ && $listen_port -le 65535 ]]; then
-            echo "监听端口设置成功：$listen_port" 
+            echo "监听端口: $listen_port"
             break
         else
-            echo -e "${RED}错误：监听端口范围必须在1-65535之间，请重新输入。${NC}" >&2
+            echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}" >&2
         fi
     done
 }
 
-function Direct_override_address() {
+function override_port() {
+    while true; do
+        read -p "请输入目标端口 (默认443): " override_port
+        override_port=${override_port:-443}
+
+        if [[ $override_port =~ ^[1-9][0-9]{0,4}$ && $override_port -le 65535 ]]; then
+            break
+        else
+            echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}"
+        fi
+    done
+}
+
+function web_port() {
+    while true; do
+        read -p "请输入web伪装监听端口 (默认8080): " fallback_port
+        fallback_port=${fallback_port:-8080}  
+
+        if [[ "$fallback_port" =~ ^[1-9][0-9]{0,4}$ && $fallback_port -le 65535 ]]; then
+            break
+        else       
+            echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}"
+        fi
+    done    
+}
+
+function override_address() {
     local is_valid_address=false
 
     while [[ "$is_valid_address" == "false" ]]; do
@@ -546,25 +528,12 @@ function Direct_override_address() {
     done
 }
 
-function Direct_override_port() {
-    while true; do
-        read -p "请输入目标端口 (默认443): " override_port
-        override_port=${override_port:-443}
-
-        if [[ $override_port =~ ^[1-9][0-9]{0,4}$ && $override_port -le 65535 ]]; then
-            break
-        else
-            echo -e "${RED}错误：目标端口范围必须在1-65535之间，请重新输入。"
-        fi
-    done
-}
-
-function ss_encryption_method() {
+function encryption_method() {
     while true; do
         read -p "请选择加密方式：
-[1]. 2022-blake3-aes-128-gcm
-[2]. 2022-blake3-aes-256-gcm
-[3]. 2022-blake3-chacha20-poly1305
+1). 2022-blake3-aes-128-gcm
+2). 2022-blake3-aes-256-gcm
+3). 2022-blake3-chacha20-poly1305
 请输入对应的数字 (默认3): " encryption_choice
         encryption_choice=${encryption_choice:-3}
 
@@ -572,19 +541,19 @@ function ss_encryption_method() {
             1)
                 ss_method="2022-blake3-aes-128-gcm"
                 ss_password=$(sing-box generate rand --base64 16)
-                echo "随机生成的密码：$ss_password"
+                shadowtls_password=$(openssl rand -base64 16)
                 break
                 ;;
             2)
                 ss_method="2022-blake3-aes-256-gcm"
                 ss_password=$(sing-box generate rand --base64 32)
-                echo "随机生成的密码：$ss_password"
+                shadowtls_password=$(openssl rand -base64 32)
                 break
                 ;;
             3)
                 ss_method="2022-blake3-chacha20-poly1305"
                 ss_password=$(sing-box generate rand --base64 32)
-                echo "随机生成的密码：$ss_password"
+                shadowtls_password=$(openssl rand -base64 32)
                 break
                 ;;
             *)
@@ -594,38 +563,13 @@ function ss_encryption_method() {
     done
 }
 
-function generate_caddy_auth_user() {
-    read -p "请输入用户名（默认自动生成）: " user_input
-
-    if [[ -z $user_input ]]; then
-        auth_user=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
-    else
-        auth_user=$user_input
-    fi
-
-    echo "用户名: $auth_user"
-}
-
-function generate_caddy_auth_pass() {
-    read -p "请输入密码（默认自动生成）: " pass_input
-
-    if [[ -z $pass_input ]]; then
-        auth_pass=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
-    else
-        auth_pass=$pass_input
-    fi
-
-    echo "密码: $auth_pass"
-}
-
-function get_caddy_fake_site() {
+function get_fake_domain() {
     while true; do
-        read -p "请输入伪装网址（默认: www.fan-2000.com）: " fake_site
-        fake_site=${fake_site:-"www.fan-2000.com"}
+        read -p "请输入伪装网址（默认: www.fan-2000.com）: " fake_domain
+        fake_domain=${fake_domain:-"www.fan-2000.com"}
 
-        # Validate the fake site URL
-        if curl --output /dev/null --silent --head --fail "$fake_site"; then
-            echo "伪装网址: $fake_site"
+        if curl --output /dev/null --silent --head --fail "$fake_domain"; then
+            echo "伪装网址: $fake_domain"
             break
         else
             echo -e "${RED}伪装网址无效或不可用，请重新输入。${NC}"
@@ -633,26 +577,30 @@ function get_caddy_fake_site() {
     done
 }
 
-function get_caddy_domain() {
-    read -p "请输入域名（用于自动申请证书）: " domain
+function get_domain() {
     while true; do
+        read -p "请输入域名（用于自动申请证书）: " domain
+        
+        local_ip_v4=$(hostname -I | awk '{print $1}')
+        local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
+  
+        resolved_ipv4=$(dig +short A "$domain" 2>/dev/null)
+        resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
+
         if [[ -z $domain ]]; then
             echo -e "${RED}域名不能为空，请重新输入。${NC}"
         else
-            if ping -c 1 $domain >/dev/null 2>&1; then
+            if [[ "$resolved_ipv4" == "$local_ip_v4" || "$resolved_ipv6" == "$local_ip_v6" ]]; then
                 break
             else
-                echo -e "${RED}域名未绑定本机 IP，请重新输入。${NC}"
+                echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
             fi
         fi
-        read -p "请输入域名（用于自动申请证书）: " domain
     done
-
-    echo "域名: $domain"
 }
 
 function test_caddy_config() {
-    echo "测试 Caddy 配置是否正确..."
+    echo "测试 Caddy 配置文件..."
     local output
     local caddy_pid
 
@@ -669,7 +617,7 @@ function test_caddy_config() {
     fi
 }
 
-function tuic_generate_uuid() {
+function generate_uuid() {
     if [[ -n $(command -v uuidgen) ]]; then
         uuid=$(uuidgen)
     elif [[ -n $(command -v uuid) ]]; then
@@ -678,19 +626,32 @@ function tuic_generate_uuid() {
         echo -e "${RED}错误：无法生成UUID，请手动设置。${NC}"
         exit 1
     fi
-    echo "随机生成的UUID为：$uuid"
+    echo "随机生成的UUID：$uuid"
 }
 
-function tuic_set_password() {
+function set_username() {
+    read -p "请输入用户名 (默认随机生成): " new_username
+    if [[ -z "$new_username" ]]; then
+        username=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
+        echo "随机生成的用户名: $username"
+    else
+        username="$new_username"
+        echo "用户名: $username"
+    fi
+}
+
+function set_password() {
     read -p "请输入密码（默认随机生成）: " password
 
     if [[ -z "$password" ]]; then
         password=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 12 | head -n 1)
-        echo "随机生成的密码为：$password"
+        echo "随机生成的密码：$password"
+    else
+        echo "密码：$password"
     fi
 }
 
-function tuic_add_multiple_users() {
+function add_tuic_multiple_users() {
     while true; do
         read -p "是否继续添加用户？(Y/N, 默认为N): " add_multiple_users
 
@@ -698,9 +659,9 @@ function tuic_add_multiple_users() {
             break
         elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
 
-            tuic_generate_uuid
+            generate_uuid
 
-            tuic_set_password
+            set_password
 
             users+=",\n\"$uuid\": \"$password\""
         else
@@ -714,7 +675,7 @@ function set_certificate_and_private_key() {
         read -p "请输入证书路径 (默认/etc/ssl/private/cert.crt): " certificate_path
         certificate_path=${certificate_path:-"/etc/ssl/private/cert.crt"}
 
-        if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" && ! -f "$certificate_path" ]]; then
+        if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" && (! -f "$certificate_path" || ${certificate_path: -4} != ".crt") ]]; then
             echo -e "${RED}错误：证书文件不存在，请重新输入。${NC}"
         else
             break
@@ -725,7 +686,7 @@ function set_certificate_and_private_key() {
         read -p "请输入私钥路径 (默认/etc/ssl/private/private.key): " private_key_path
         private_key_path=${private_key_path:-"/etc/ssl/private/private.key"}
 
-        if [[ "$private_key_path" != "/etc/ssl/private/private.key" && ! -f "$private_key_path" ]]; then
+        if [[ "$private_key_path" != "/etc/ssl/private/private.key" && (! -f "$private_key_path" || ${private_key_path: -4} != ".key") ]]; then
             echo -e "${RED}错误：私钥文件不存在，请重新输入。${NC}"
         else
             break
@@ -738,9 +699,9 @@ function set_congestion_control() {
 
     while true; do
         read -p "请选择拥塞控制算法 (默认$default_congestion_control):
- [1]. bbr
- [2]. cubic
- [3]. new_reno
+1). bbr
+2). cubic
+3). new_reno
 请输入对应的数字: " congestion_control
 
         case $congestion_control in
@@ -770,14 +731,15 @@ function set_congestion_control() {
 function ask_certificate_option() {
     while true; do
         read -p "请选择证书来源：
- [1]. 自动申请证书
- [2]. 自备证书
+1). 自动申请证书
+2). 自备证书
 请输入对应的数字: " certificate_option
 
         case $certificate_option in
             1)
                 echo "已选择自动申请证书。"
-                tuic_apply_certificate
+                get_domain
+                apply_certificate "$domain" "$private_key_path" "$certificate_path"
                 break
                 ;;
             2)
@@ -792,23 +754,13 @@ function ask_certificate_option() {
     done
 }
 
-function tuic_apply_certificate() {
-    local domain
+function apply_certificate() {
+    local domain="$1"
     local has_ipv4=false
 
     if curl -s4 ifconfig.co &>/dev/null; then
         has_ipv4=true
     fi
-
-    while true; do
-        read -p "请输入您的域名: " domain
-
-        if ping -c 1 "$domain" &>/dev/null; then
-            break
-        else
-            echo -e "${RED}错误：域名未解析或输入错误，请重新输入。${NC}"
-        fi
-    done
     
     echo "正在申请证书..."
     curl -s https://get.acme.sh | sh -s email=example@gmail.com
@@ -856,16 +808,10 @@ function read_down_speed() {
     done
 }
 
-function read_auth_password() {
-    read -p "请输入认证密码 (默认随机生成): " auth_password
-    auth_password=${auth_password:-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)}
-    echo "认证密码设置成功：$auth_password"
-}
-
 function read_users() {
     users="[
         {
-          \"auth_str\": \"$auth_password\"
+          \"auth_str\": \"$password\"
         }"
 
     while true; do
@@ -876,10 +822,10 @@ function read_users() {
         fi
 
         if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            read_auth_password
+            set_password
             users+=",
         {
-          \"auth_str\": \"$auth_password\"
+          \"auth_str\": \"$password\"
         }"
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
@@ -891,75 +837,17 @@ function read_users() {
     users+=$'\n      ]'
 }
 
-function validate_domain() {
-    while true; do
-        read -p "请输入您的域名: " domain
-
-        if ping -c 1 "$domain" &>/dev/null; then
-            break
-        else
-            echo -e "${RED}错误：域名未解析或输入错误，请重新输入。${NC}"
-        fi
-    done
-}
-
-function set_shadowtls_username() {
-    read -p "请输入用户名 (默认随机生成): " new_username
-    username=${new_username:-$(generate_shadowtls_random_username)}
-    echo "用户名: $username"
-}
-
-function generate_shadowtls_random_username() {
-    local username=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
-    echo "$username"
-}
-
-function generate_shadowtls_password() {
-    read -p "请选择 Shadowsocks 加密方式：
-[1]. 2022-blake3-chacha20-poly1305
-[2]. 2022-blake3-aes-256-gcm
-[3]. 2022-blake3-aes-128-gcm
-请输入对应的数字 (默认1): " encryption_choice
-    encryption_choice=${encryption_choice:-1}
-
-    case $encryption_choice in
-        1)
-            ss_method="2022-blake3-chacha20-poly1305"
-            shadowtls_password=$(openssl rand -base64 32)
-            ss_password=$(openssl rand -base64 32)
-            ;;
-        2)
-            ss_method="2022-blake3-aes-256-gcm"
-            shadowtls_password=$(openssl rand -base64 32)
-            ss_password=$(openssl rand -base64 32)
-            ;;
-        3)
-            ss_method="2022-blake3-aes-128-gcm"
-            shadowtls_password=$(openssl rand -base64 16)
-            ss_password=$(openssl rand -base64 16)
-            ;;
-        *)
-            echo -e "${RED}无效的选择，使用默认加密方式。${NC}"
-            ss_method="2022-blake3-chacha20-poly1305"
-            shadowtls_password=$(openssl rand -base64 32)
-            ss_password=$(openssl rand -base64 32)
-            ;;
-    esac
-
-    echo "加密方式: $ss_method"
-}
-
 function add_shadowtls_user() {
     local user_password=""
-    if [[ $encryption_choice == 1 || $encryption_choice == 2 ]]; then
+    if [[ $encryption_choice == 2 || $encryption_choice == 3 ]]; then
         user_password=$(openssl rand -base64 32)
-    elif [[ $encryption_choice == 3 ]]; then
+    elif [[ $encryption_choice == 1 ]]; then
         user_password=$(openssl rand -base64 16)
     fi
 
-    read -p "请输入用户名 (默认随机生成): " new_username
-    local new_user=${new_username:-$(generate_shadowtls_random_username)}
-
+    local new_user=$(set_username)
+    new_user=${new_user##*: }
+    
     users+=",{
       \"name\": \"$new_user\",
       \"password\": \"$user_password\"
@@ -967,82 +855,6 @@ function add_shadowtls_user() {
 
     echo "用户名: $new_user"
     echo "ShadowTLS 密码: $user_password"
-}
-
-function set_shadowtls_handshake_server() {
-    local handshake_server=""
-    local openssl_output=""
-
-    read -p "请输入握手服务器地址 (默认www.apple.com): " handshake_server
-    handshake_server=${handshake_server:-www.apple.com}
-
-    echo "正在验证握手服务器支持的TLS版本..."
-
-    local is_supported="false"
-
-    if command -v openssl >/dev/null 2>&1; then
-        local openssl_version=$(openssl version)
-
-        if [[ $openssl_version == *"OpenSSL"* ]]; then
-            while true; do
-                openssl_output=$(timeout 90s openssl s_client -connect "$handshake_server:443" -tls1_3 2>&1)
-
-                if [[ $openssl_output == *"Protocol  : TLSv1.3"* ]]; then
-                    is_supported="true"
-                    echo "握手服务器支持TLS 1.3。"
-                    break
-                else
-                    echo -e "${RED}错误：握手服务器不支持TLS 1.3，请重新输入握手服务器地址。${NC}"
-                    read -p "请输入握手服务器地址 (默认www.apple.com): " handshake_server
-                    handshake_server=${handshake_server:-www.apple.com}
-                    echo "正在验证握手服务器支持的TLS版本..."
-                fi
-            done
-        fi
-    fi
-
-    if [[ $is_supported == "false" ]]; then
-        echo -e "${YELLOW}警告：无法验证握手服务器支持的TLS版本。请确保握手服务器支持TLS 1.3。${NC}"
-    fi
-    handshake_server_global=$handshake_server
-}
-
-function reality_generate_uuid() {
-    local uuid=$(uuidgen)
-    echo "$uuid"
-}
-
-function generate_short_id() {
-    local length=$1
-    local short_id=$(openssl rand -hex "$length")
-    echo "$short_id"
-}
-
-function select_flow_type() {
-    local flow_type="xtls-rprx-vision"
-
-    while true; do
-        read -p "请选择流控类型：
- [1]. xtls-rprx-vision（vless+vision+reality)
- [2]. 留空(vless+h2/grpc+reality)
-请输入选项 (默认为 xtls-rprx-vision): " flow_option
-
-        case $flow_option in
-            "" | 1)
-                flow_type="xtls-rprx-vision"
-                break
-                ;;
-            2)
-                flow_type=""
-                break
-                ;;
-            *)
-                echo -e "${RED}错误的选项，请重新输入！${NC}" >&2
-                ;;
-        esac
-    done
-
-    echo "$flow_type"
 }
 
 function validate_tls13_support() {
@@ -1124,6 +936,39 @@ function generate_private_key_config() {
     echo "$private_key"
 }
 
+function generate_short_id() {
+    local length=$1
+    local short_id=$(openssl rand -hex "$length")
+    echo "$short_id"
+}
+
+function select_flow_type() {
+    local flow_type="xtls-rprx-vision"
+
+    while true; do
+        read -p "请选择流控类型：
+1). xtls-rprx-vision（vless+vision+reality)
+2). 留空(vless+h2/grpc+reality)
+请输入选项 (默认为 xtls-rprx-vision): " flow_option
+
+        case $flow_option in
+            "" | 1)
+                flow_type="xtls-rprx-vision"
+                break
+                ;;
+            2)
+                flow_type=""
+                break
+                ;;
+            *)
+                echo -e "${RED}错误的选项，请重新输入！${NC}" >&2
+                ;;
+        esac
+    done
+
+    echo "$flow_type"
+}
+
 function generate_short_ids_config() {
     local short_ids=()
     local add_more_short_ids="y"
@@ -1179,8 +1024,8 @@ function generate_flow_config() {
 
     while true; do
         read -p "请选择传输层协议：
- [1]. http
- [2]. grpc
+1). http
+2). grpc
 请输入选项 (默认为 http): " transport_option
 
         case $transport_option in
@@ -1219,10 +1064,10 @@ function generate_user_config() {
         local user_uuid
 
         while true; do
-            read -p "请输入用户 UUID (默认随机生成 UUID): " user_uuid
+            read -p "请输入用户 UUID (默认随机生成): " user_uuid
 
             if [[ -z "$user_uuid" ]]; then
-                user_uuid=$(reality_generate_uuid)
+                user_uuid=$(generate_uuid | sed 's/随机生成的UUID：//')
                 break
             fi
 
@@ -1266,8 +1111,8 @@ function generate_user_config() {
 function prompt_setup_type() {
     while true; do
         echo "请选择传输层协议："
-        echo "  [1]. TCP（trojan+tcp+tls+web）"
-        echo "  [2]. ws（trojan+ws+tls+CDN）"
+        echo "1). TCP（trojan+tcp+tls+web）"
+        echo "2). ws（trojan+ws+tls+CDN）"
 
         read -p "请选择 [1-2]: " setup_type
 
@@ -1287,61 +1132,6 @@ function prompt_setup_type() {
                 ;;
         esac
     done
-}
-
-function prompt_port() {
-  read -p "请输入web伪装监听端口 (默认8080): " fallback_port
-  fallback_port=${fallback_port:-8080}  
-
-  if ! [[ "$fallback_port" =~ ^[0-9]+$ ]] || ((fallback_port < 1 || fallback_port > 65535)); then
-    echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}"
-    prompt_port
-  fi
-}
-
-function prompt_fake_domain() {
-  read -p "请输入伪装网址 (默认www.fan-2000.com): " input_fake_domain
-  fake_domain=${input_fake_domain:-www.fan-2000.com}  
-
-  if [[ "$fake_domain" != "www.fan-2000.com" ]]; then
-    response_code=$(curl -s -o /dev/null -w "%{http_code}" -I "https://$fake_domain")
-    if [ "$response_code" -ne 200 ]; then
-     echo -e "${RED}错误：伪装网址无效或不可用，请重新输入。${NC}"
-      prompt_fake_domain
-    fi
-  fi
-}
-
-function prompt_and_check_bound_domain() {
-  read -p "请输入域名（用于自动申请证书）: " input_domain
-
-  local_ip_v4=$(hostname -I | awk '{print $1}')
-  local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
-  
-  resolved_ipv4=$(dig +short A "$input_domain")
-  resolved_ipv6=$(dig +short AAAA "$input_domain")
-
-  if [[ "$resolved_ipv4" != "$local_ip_v4" && "$resolved_ipv6" != "$local_ip_v6" ]]; then
-    echo "错误：域名未绑定本机IP，请重新输入。"
-    prompt_and_check_bound_domain
-  else
-    domain="$input_domain"
-  fi
-}
-
-function prompt_password() {
-  read -p "请输入用户密码 (默认随机生成): " password_input
-
-  if [[ -z "$password_input" ]]; then
-    password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
-  else
-    password="$password_input"
-  fi
-
-  if [[ -z "$password" ]]; then
-    echo -e "${RED}错误：密码不能为空。${NC}"
-    prompt_password
-  fi
 }
 
 function prompt_additional_users() {
@@ -1420,7 +1210,7 @@ function prompt_and_generate_transport_config() {
     fi
 }
 
-function Direct_write_config_file() {
+function generate_Direct_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
     echo "{
@@ -1455,11 +1245,9 @@ function Direct_write_config_file() {
     }
   ]
 }" > "$config_file"
-
-    echo "配置文件 $config_file 写入成功。"
 }
 
-function ss_write_sing_box_config() {
+function generate_ss_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
     echo "{
@@ -1489,11 +1277,9 @@ function ss_write_sing_box_config() {
     }
   ]
 }" > "$config_file"
-
-    echo "配置文件 $config_file 创建成功。"
 }
 
-function create_caddy_config() {
+function generate_naive_config() {
     local config_file="/usr/local/etc/caddy/caddy.json"
 
     echo "{
@@ -1507,8 +1293,8 @@ function create_caddy_config() {
               \"handle\": [
                 {
                   \"handler\": \"forward_proxy\",
-                  \"auth_user_deprecated\": \"$auth_user\",
-                  \"auth_pass_deprecated\": \"$auth_pass\",
+                  \"auth_user_deprecated\": \"$username\",
+                  \"auth_pass_deprecated\": \"$password\",
                   \"hide_ip\": true,
                   \"hide_via\": true,
                   \"probe_resistance\": {}
@@ -1542,7 +1328,7 @@ function create_caddy_config() {
                     \"tls\": {}
                   },
                   \"upstreams\": [
-                    {\"dial\": \"$fake_site:443\"}
+                    {\"dial\": \"$fake_domain:443\"}
                   ]
                 }
               ]
@@ -1581,8 +1367,6 @@ function create_caddy_config() {
     }
   }
 }" > "$config_file"
-
-    echo "配置文件 $config_file 写入成功。"
 }
 
 function generate_tuic_config() {
@@ -1591,12 +1375,12 @@ function generate_tuic_config() {
     local certificate=""
     local private_key=""
     
-    set_listen_port
-    tuic_generate_uuid
-    tuic_set_password
+    listen_port
+    generate_uuid
+    set_password
     users="\"$uuid\": \"$password\""
 
-    tuic_add_multiple_users
+    add_tuic_multiple_users
     users=$(echo -e "$users" | sed -e 's/^/        /')
 
     set_certificate_and_private_key
@@ -1633,12 +1417,11 @@ function generate_Hysteria_config() {
     local certificate=""
     local private_key=""
  
-    set_listen_port
+    listen_port
     read_up_speed
     read_down_speed
-    read_auth_password
-    read_users
-    validate_domain
+    set_password    
+    read_users    
     set_certificate_and_private_key
     certificate_path="$certificate_path"
     private_key_path="$private_key_path"
@@ -1663,12 +1446,9 @@ function generate_Hysteria_config() {
       \"users\": $users,
       \"tls\": {
         \"enabled\": true,
-        \"server_name\": \"$domain\",
         \"alpn\": [
           \"h3\"
         ],
-        \"min_version\": \"1.2\",
-        \"max_version\": \"1.3\",
         \"certificate_path\": \"$certificate_path\",
         \"key_path\": \"$private_key_path\"
       }
@@ -1687,12 +1467,12 @@ function generate_Hysteria_config() {
 }" > "$config_file"
 }
 
-function configure_shadowtls_config_file() {
+function generate_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
-    set_listen_port
-    set_shadowtls_username
-    generate_shadowtls_password
+    listen_port
+    set_username
+    encryption_method
 
     local users="{
           \"name\": \"$username\",
@@ -1709,7 +1489,7 @@ function configure_shadowtls_config_file() {
         fi
     done
 
-    set_shadowtls_handshake_server
+    local user_input=$(generate_target_server_config) 
 
     echo "{
   \"inbounds\": [
@@ -1723,7 +1503,7 @@ function configure_shadowtls_config_file() {
         $users
       ],
       \"handshake\": {
-        \"server\": \"$handshake_server_global\",
+        \"server\": \"$user_input\",
         \"server_port\": 443
       },
       \"strict_mode\": true,
@@ -1754,7 +1534,7 @@ function configure_shadowtls_config_file() {
 function generate_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
-    local listen_port_output=$(set_listen_port)
+    local listen_port_output=$(listen_port)
     local listen_port=$(echo "$listen_port_output" | grep -oP '\d+$')
     local flow_type=$(select_flow_type)
 
@@ -1810,13 +1590,11 @@ $short_ids
   ]
 }"
 
-    echo "$config_content" > "$config_file"
-    echo "Sing-Box 配置文件已生成并保存至 $config_file"
-    
+    echo "$config_content" > "$config_file" 
     check_firewall_configuration       
 }
 
-function generate_and_write_config() {
+function generate_caddy_config() {
   caddy_config="{
   \"logging\": {
     \"logs\": {
@@ -1899,7 +1677,6 @@ function generate_and_write_config() {
 }"
 
   echo "$caddy_config" > /usr/local/etc/caddy/caddy.json
-  echo "Caddy配置文件创建成功。"
 }
 
 function generate_trojan_config() {
@@ -1949,172 +1726,210 @@ function generate_trojan_config() {
 }"
 
     echo "$sing_box_config" > /usr/local/etc/sing-box/config.json
-    echo "sing-box配置文件创建成功。"
 }
 
 function display_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"    
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
+    local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
+    local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
+    local public_key=$(cat /tmp/public_key_temp.txt)
+    if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
+        transport_type="tcp"
+    fi
 
-        local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-        local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
-        local flow_type=$(jq -r '.inbounds[0].users[].flow' "$config_file")
-        local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
-        local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-        local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
-        local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
-        local public_key=$(cat /tmp/public_key_temp.txt)
-
-        echo -e "${CYAN}Vless+Reality 节点配置信息：${NC}"
-        echo -e "${CYAN}==================================================================${NC}"  
-        echo "监听端口: $listen_port"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "用户 UUID:"
-        echo "$users"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "流控类型: $flow_type"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "传输层协议: $transport_type"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "ServerName: $server_name"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "目标网站地址: $target_server"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "Short ID:"
-        echo "$short_ids"
-        echo -e "${CYAN}------------------------------------------------------------------${NC}"  
-        echo "PublicKey: $public_key"
-       echo -e "${CYAN}==================================================================${NC}" 
+    echo -e "${CYAN}Vless+Reality 节点配置信息：${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "用户 UUID:" | tee -a "$output_file"
+    echo "$users" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "流控类型: $flow_type" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "传输层协议: $transport_type" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "ServerName: $server_name" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "目标网站地址: $target_server" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "Short ID:" | tee -a "$output_file"
+    echo "$short_ids" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "PublicKey: $public_key" | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file"
 }
 
 function display_trojan_config() {
-  config_file="/usr/local/etc/sing-box/config.json"
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"  
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
+    local password_list=""
+    for password in "${passwords[@]}"; do
+        password_list+="\n$password"
+    done
+    local alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
 
-  server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-  listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-  passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
-  password_list=""
-  for password in "${passwords[@]}"; do
-      password_list+="\n$password"
-  done
-  alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
-  transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
-  transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
-
-  echo -e "${CYAN}trojan 节点配置信息：${NC}"
-  echo -e "${CYAN}==================================================================${NC}" 
-  echo "地址: $server_name"
-  echo -e "${CYAN}------------------------------------------------------------------${NC}"
-  echo "监听端口: $listen_port"
-  echo -e "${CYAN}------------------------------------------------------------------${NC}"
-  echo -e "密码:$password_list"
-  echo -e "${CYAN}------------------------------------------------------------------${NC}"
-  echo "ALPN: $alpn"
-  echo -e "${CYAN}------------------------------------------------------------------${NC}"
-  if [ "$transport_type" != "null" ]; then
-    echo "传输协议: $transport_type"
-    echo "路径: $transport_path"
-  else
-    echo "传输协议: tcp"
-  fi
-  echo -e "${CYAN}==================================================================${NC}" 
+    echo -e "${CYAN}trojan 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "地址: $server_name"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "密码:$password_list"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "ALPN: $alpn"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    if [ "$transport_type" != "null" ]; then
+        echo "传输协议: $transport_type"  | tee -a "$output_file"
+        echo "路径: $transport_path"  | tee -a "$output_file"
+    else
+        echo "传输协议: tcp"  | tee -a "$output_file"
+    fi
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "配置信息已保存至 $output_file"
 }
 
 function display_tuic_config() {
     local config_file="/usr/local/etc/tuic/config.json"
-
-echo -e "${CYAN}TUIC 节点配置信息：${NC}"    
-echo -e "${CYAN}==================================================================${NC}" 
-    echo "监听端口: $(jq -r '.server' "$config_file" | sed 's/\[::\]://')"
-echo -e "${CYAN}------------------------------------------------------------------${NC}" 
-    echo "UUID和密码列表:"
-    jq -r '.users | to_entries[] | "UUID:\(.key)\t密码:\(.value)"' "$config_file"
-echo -e "${CYAN}------------------------------------------------------------------${NC}" 
-    echo "拥塞控制算法: $(jq -r '.congestion_control' "$config_file")"
-echo -e "${CYAN}------------------------------------------------------------------${NC}" 
-    echo "ALPN协议:$(jq -r '.alpn[] | select(. != "")' "$config_file" | sed ':a;N;$!ba;s/\n/, /g')"
-echo -e "${CYAN}==================================================================${NC}"    
+    local output_file="/usr/local/etc/tuic/output.txt"  
+    local listen_port=$(jq -r '.server' "$config_file" | sed 's/\[::\]://')
+    local UUIDS=$(jq -r '.users | to_entries[] | "UUID:\(.key)\t密码:\(.value)"' "$config_file")
+    local congestion_control=$(jq -r '.congestion_control' "$config_file")
+    local alpn=$(jq -r '.alpn[] | select(. != "")' "$config_file" | sed ':a;N;$!ba;s/\n/, /g')
+  
+    echo -e "${CYAN}TUIC 节点配置信息：${NC}"  | tee -a "$output_file"     
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo "监听端口: $listen_port"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo "UUID和密码列表:"  | tee -a "$output_file" 
+    echo "$UUIDS"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "拥塞控制算法: $congestion_control"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo "ALPN协议:$alpn"  | tee -a "$output_file" 
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "配置信息已保存至 $output_file"    
 }
 
-function display_Hysteria_config_info() {
+function display_Hysteria_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt" 
 
-    echo -e "${CYAN}Hysteria 节点配置信息：${NC}"
-    echo -e "${CYAN}==================================================================${NC}" 
-    echo "域名：$domain"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}" 
-    echo "监听端口：$listen_port"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}" 
-    echo "上行速度：${up_mbps}Mbps"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}" 
-    echo "下行速度：${down_mbps}Mbps"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}" 
+    echo -e "${CYAN}Hysteria 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "域名：$domain"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "监听端口：$listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "上行速度：${up_mbps}Mbps"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "下行速度：${down_mbps}Mbps"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "用户密码："
     local user_count=$(echo "$users" | jq length)
     for ((i = 0; i < user_count; i++)); do
         local auth_str=$(echo "$users" | jq -r ".[$i].auth_str")
-        echo "用户$i: $auth_str"
+        echo "用户$i: $auth_str"  | tee -a "$output_file"
     done
-    echo -e "${CYAN}==================================================================${NC}"  
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo "配置信息已保存至 $output_file"
 }
 
 function display_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
+    local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "ShadowTLS 密码: \(.password)"' "$config_file")
+    local user_input=$(jq -r '.inbounds[0].handshake.server' "$config_file")
+    local ss_password=$(jq -r '.inbounds[1].password' "$config_file")    
 
-    echo -e "${CYAN}ShadowTLS 节点配置信息：${NC}"
-    echo -e "${CYAN}================================================================${NC}"
-    echo "监听端口: $listen_port"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    jq -r '.inbounds[0].users[] | "ShadowTLS 密码: \(.password)"' "$config_file" | while IFS= read -r line; do
-    echo "$line"
-done  
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "Shadowsocks 密码: $ss_password"
-    echo -e "${CYAN}================================================================${NC}"
+    echo -e "${CYAN}ShadowTLS 节点配置信息：${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
+    echo "监听端口: $listen_port" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo "$shadowtls_passwords" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo "Shadowsocks 密码: $ss_password" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo "握手服务器地址: $user_input" | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file"
 }
 
-function Direct_extract_config_info() {
+function display_Direct_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"    
     local local_ip
-    local_ip=$(curl -s http://ifconfig.me)
-
-    echo -e "${CYAN}Direct 节点配置信息：${NC}"
-    echo -e "${CYAN}================================================================${NC}"
-    echo "中转地址: $local_ip"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "监听端口: $listen_port"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "目标地址: $override_address"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "目标端口: $override_port"
-    echo -e "${CYAN}================================================================${NC}"
+    local_ip=$(hostname -I | awk '{print $1}')
+    local override_address=$(jq -r '.inbounds[0].override_address' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local override_port=$(jq -r '.inbounds[0].override_port' "$config_file")
+  
+    echo -e "${CYAN}Direct 节点配置信息：${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "中转地址: $local_ip" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "目标地址: $override_address" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "目标端口: $override_port" | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file"    
 }
 
-function Shadowsocks_extract_config_info() {
+function display_Shadowsocks_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt" 
     local local_ip
-    local_ip=$(curl -s http://ifconfig.me)
-
-    echo -e "${CYAN}Shadowsocks 节点配置信息：${NC}"
-    echo -e "${CYAN}================================================================${NC}"
-    echo "服务器地址: $local_ip"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "监听端口: $listen_port"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "加密方式: $ss_method"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "密码: $ss_password"
-    echo -e "${CYAN}================================================================${NC}"
+    local_ip=$(hostname -I | awk '{print $1}')
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
+    local ss_password=$(jq -r '.inbounds[0].password' "$config_file")
+  
+    echo -e "${CYAN}Shadowsocks 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "服务器地址: $local_ip"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "加密方式: $ss_method"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "密码: $ss_password"  | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file" 
 }
 
-function NaiveProxy_extract_config_info() {
-
-    echo -e "${CYAN}NaiveProxy 节点配置信息：${NC}"
-    echo -e "${CYAN}================================================================${NC}"
-    echo "监听端口: $listen_port"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "用 户 名: $auth_user"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "密    码: $auth_pass"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"
-    echo "域    名: $domain"   
-    echo -e "${CYAN}================================================================${NC}"
+function display_NaiveProxy_config() {
+    local config_file="/usr/local/etc/caddy/caddy.json"
+    local output_file="/usr/local/etc/caddy/output.txt"
+    local listen_port=$(jq -r '.apps.http.servers.https.listen[0]' "$config_file")
+    local username=$(jq -r '.apps.http.servers.https.routes[0].handle[0].auth_user_deprecated' "$config_file")
+    local password=$(jq -r '.apps.http.servers.https.routes[0].handle[0].auth_pass_deprecated' "$config_file")
+    local domain=$(jq -r '.apps.http.servers.https.tls_connection_policies[0].match.sni[0]' "$config_file")
+  
+    echo -e "${CYAN}NaiveProxy 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "用 户 名: $username"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "密    码: $password"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "域    名: $domain"  | tee -a "$output_file"   
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file" 
 }
 
 function restart_sing_box_service() {
@@ -2143,7 +1958,7 @@ function restart_naiveproxy_service() {
     systemctl status caddy
 }
 
-function restart_tuic() {
+function restart_tuic_service() {
     echo "重启 TUIC 服务..."
     systemctl restart tuic.service
 
@@ -2179,13 +1994,43 @@ function uninstall_naiveproxy() {
 }
 
 function uninstall_tuic() {
-    echo "卸载 TUIC 服务..."
+    echo "开始卸载 TUIC..."
     systemctl stop tuic.service
     systemctl disable tuic.service
     rm -rf /etc/systemd/system/tuic.service
     rm -rf /usr/local/etc/tuic
     rm -rf /usr/local/bin/tuic
-    echo "TUIC 服务已卸载..."
+    echo "TUIC 卸载完成。"
+}
+
+function uninstall() {
+    local uninstall_sing_box=false
+    local uninstall_caddy=false
+    local uninstall_tuic=false
+
+    if [[ -f "/etc/systemd/system/sing-box.service" ]]; then
+        uninstall_sing_box=true
+    fi
+    
+    if [[ -f "/etc/systemd/system/caddy.service" ]]; then
+        uninstall_caddy=true
+    fi
+
+    if [[ -f "/etc/systemd/system/tuic.service" ]]; then
+        uninstall_tuic=true
+    fi
+
+    if [[ "$uninstall_sing_box" == true ]]; then
+        uninstall_sing_box
+    fi
+
+    if [[ "$uninstall_caddy" == true ]]; then
+        uninstall_caddy
+    fi
+
+    if [[ "$uninstall_tuic" == true ]]; then
+        uninstall_tuic
+    fi
 }
 
 function Direct_install() {
@@ -2193,15 +2038,16 @@ function Direct_install() {
     enable_bbr
     select_sing_box_install_option
     configure_sing_box_service
-    check_sing_box_folder
-    set_listen_port
-    Direct_override_address
-    Direct_override_port
-    Direct_write_config_file
-    check_firewall_configuration    
+    check_sing_box_folder    
+    listen_port
+    override_address
+    override_port
+    generate_Direct_config
+    check_firewall_configuration 
+    systemctl daemon-reload   
     systemctl enable sing-box   
     systemctl start sing-box
-    Direct_extract_config_info
+    display_Direct_config
 }
 
 function Shadowsocks_install() {
@@ -2210,13 +2056,14 @@ function Shadowsocks_install() {
     select_sing_box_install_option
     configure_sing_box_service
     check_sing_box_folder
-    set_listen_port
-    ss_encryption_method
-    ss_write_sing_box_config
-    check_firewall_configuration    
+    listen_port
+    encryption_method
+    generate_ss_config
+    check_firewall_configuration 
+    systemctl daemon-reload   
     systemctl enable sing-box   
     systemctl start sing-box
-    Shadowsocks_extract_config_info
+    display_Shadowsocks_config
 }
 
 function NaiveProxy_install() {
@@ -2225,12 +2072,12 @@ function NaiveProxy_install() {
     install_go
     install_caddy
     check_caddy_folder
-    set_listen_port
-    generate_caddy_auth_user
-    generate_caddy_auth_pass
-    get_caddy_fake_site
-    get_caddy_domain    
-    create_caddy_config
+    listen_port
+    set_username
+    set_password
+    get_fake_domain
+    get_domain    
+    generate_naive_config
     check_firewall_configuration    
     test_caddy_config
     configure_caddy_service
@@ -2238,7 +2085,7 @@ function NaiveProxy_install() {
     systemctl enable caddy
     systemctl start caddy
     systemctl reload caddy
-    NaiveProxy_extract_config_info
+    display_NaiveProxy_config
 }
 
 function tuic_install() {
@@ -2269,7 +2116,7 @@ function Hysteria_install() {
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
-    display_Hysteria_config_info
+    display_Hysteria_config
 }
 
 function shadowtls_install() {
@@ -2277,7 +2124,7 @@ function shadowtls_install() {
     enable_bbr
     select_sing_box_install_option      
     check_sing_box_folder
-    configure_shadowtls_config_file
+    generate_shadowtls_config
     check_firewall_configuration      
     configure_sing_box_service
     systemctl daemon-reload
@@ -2309,14 +2156,14 @@ function trojan_install() {
     install_latest_caddy
     configure_caddy_service
     prompt_setup_type
-    set_listen_port
-    prompt_password
+    listen_port
+    set_password
     prompt_additional_users    
-    prompt_port
-    prompt_fake_domain
-    prompt_and_check_bound_domain 
-    transport_and_fallback_config=$(prompt_and_generate_transport_config) 
-    generate_and_write_config  
+    web_port
+    get_fake_domain
+    get_domain      
+    generate_caddy_config 
+    transport_and_fallback_config=$(prompt_and_generate_transport_config)
     check_firewall_configuration
     test_caddy_config
     generate_trojan_config
@@ -2329,86 +2176,103 @@ function trojan_install() {
     display_trojan_config
 }
 
+function view_saved_config() {
+    local config_paths=(
+        "/usr/local/etc/sing-box/output.txt"
+        "/usr/local/etc/tuic/output.txt"
+        "/usr/local/etc/caddy/output.txt"
+    )
+
+    local found=false
+    for path in "${config_paths[@]}"; do
+        if [[ -f "$path" ]]; then
+            echo "配置信息文件 ($path):"
+            cat "$path"
+            found=true
+        fi
+    done
+
+    if [[ "$found" == false ]]; then
+        echo "未找到保存的配置信息文件！"
+    fi
+}
+
 function main_menu() {
-        echo -e "${CYAN}               ------------------------------------------------------------------------------------ ${NC}"
-        echo -e "${CYAN}               |                          欢迎使用 Mr. xiao 安装脚本                              |${NC}"
-        echo -e "${CYAN}               |                      项目地址:https://github.com/TinrLin                         |${NC}"
-        echo -e "${CYAN}               |                 YouTube频道地址:https://youtube.com/@Mr_xiao502                  |${NC}" 
-        echo -e "${CYAN}               |                             转载请注明出处，谢谢！                               |${NC}"       
-        echo -e "${CYAN}               ------------------------------------------------------------------------------------${NC}"
-        echo -e "${CYAN}请选择要执行的操作：${NC}"
-        echo -e "  ${CYAN}[01]. TUIC V5${NC}"         
-        echo -e "  ${CYAN}[02]. Vless${NC}"
-        echo -e "  ${CYAN}[03]. Direct${NC}"
-        echo -e "  ${CYAN}[04]. Trojan${NC}"
-        echo -e "  ${CYAN}[05]. Hysteria${NC}"                   
-        echo -e "  ${CYAN}[06]. ShadowTLS V3${NC}"
-        echo -e "  ${CYAN}[07]. NaiveProxy${NC}"            
-        echo -e "  ${CYAN}[08]. Shadowsocks${NC}"
-        echo -e "  ${CYAN}[09]. 重启   TUIC   服务${NC}"
-        echo -e "  ${CYAN}[10]. 重启   Caddy  服务${NC}"
-        echo -e "  ${CYAN}[11]. 重启 sing-box 服务${NC}"
-        echo -e "  ${CYAN}[12]. 卸载   TUIC   服务${NC}"
-        echo -e "  ${CYAN}[13]. 卸载   Caddy  服务${NC}"
-        echo -e "  ${CYAN}[14]. 卸载 sing-box 服务${NC}"
-        echo -e "  ${CYAN}[00]. 退出脚本${NC}"
+    echo -e "${CYAN}               ------------------------------------------------------------------------------------ ${NC}"
+    echo -e "${CYAN}               |                          欢迎使用 Mr. xiao 安装脚本                              |${NC}"
+    echo -e "${CYAN}               |                      项目地址:https://github.com/TinrLin                         |${NC}"
+    echo -e "${CYAN}               |                 YouTube频道地址:https://youtube.com/@Mr_xiao502                  |${NC}" 
+    echo -e "${CYAN}               |                             转载请注明出处，谢谢！                               |${NC}"       
+    echo -e "${CYAN}               ------------------------------------------------------------------------------------${NC}"
+    echo -e "${CYAN}请选择要执行的操作：${NC}"
+    echo -e " ${CYAN}1). TUIC V5${NC}"         
+    echo -e " ${CYAN}2). Vless${NC}"
+    echo -e " ${CYAN}3). Direct${NC}"
+    echo -e " ${CYAN}4). Trojan${NC}"
+    echo -e " ${CYAN}5). Hysteria${NC}"                   
+    echo -e " ${CYAN}6). ShadowTLS V3${NC}"
+    echo -e " ${CYAN}7). NaiveProxy${NC}"            
+    echo -e " ${CYAN}8). Shadowsocks${NC}"
+    echo -e " ${CYAN}9). 查看节点信息${NC}"
+    echo -e "${CYAN}10). 重启 TUIC 服务${NC}"
+    echo -e "${CYAN}11). 重启 Caddy 服务${NC}"
+    echo -e "${CYAN}12). 重启 sing-box 服务${NC}"
+    echo -e "${CYAN}13). 卸载服务${NC}"
+    echo -e " ${CYAN}0). 退出脚本${NC}"
 
-        local choice
-        read -p "请选择 [0-14]: " choice
+    local choice
+    read -p "请选择 [0-13]: " choice
 
-        case $choice in
-            1)
-                tuic_install
-                ;;
-            2)
-                reality_install
-                ;;
-            3)
-                Direct_install
-                ;;
-            4)
-                trojan_install
-                ;;                
-            5)
-                Hysteria_install
-                ;;
-            6)
-                shadowtls_install
-                ;;
-            7)
-                NaiveProxy_install
-                ;;
-            8)
-                Shadowsocks_install
-                ;;                
-            9)
-                restart_tuic
-                ;;
+    case $choice in
+        1)
+            tuic_install
+            ;;
+        2)
+            reality_install
+            ;;
+        3)
+            Direct_install
+            ;;
+        4)
+            trojan_install
+            ;;                
+        5)
+            Hysteria_install
+            ;;
+        6)
+            shadowtls_install
+            ;;
+        7)
+            NaiveProxy_install
+            ;;
+        8)
+            Shadowsocks_install
+            ;;                
+        9)
+            view_saved_config
+            ;;
 
-            10)
-                restart_naiveproxy_service
-                ;;
-            11)
-                restart_sing_box_service
-                ;;
-            12)
-                uninstall_tuic
-                ;;
-            13)
-                uninstall_naiveproxy
-                ;;
-            14)
-                uninstall_sing_box
-                ;;         
-            0)
-                echo "感谢使用 Mr. xiao 安装脚本！再见！"
-                exit 0
-                ;;
-            *)
-                echo -e "${RED}无效的选择，请重新输入。${NC}"
-                main_menu
-                ;;
-        esac
+        10)
+            restart_tuic_service
+            ;;
+        11)
+            restart_naiveproxy_service
+            ;;
+        12)
+            restart_sing_box_service
+            ;;
+        13)
+            uninstall
+            ;;        
+        0)
+            echo "感谢使用 Mr. xiao 安装脚本！再见！"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}无效的选择，请重新输入。${NC}"
+            main_menu
+            ;;
+    esac
 }
 
 main_menu
