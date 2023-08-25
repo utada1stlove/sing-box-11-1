@@ -129,6 +129,13 @@ function create_tuic_directory() {
     fi
 }
 
+function check_juicity_folder() {
+    local folder="/usr/local/etc/juicity"
+    if [[ ! -d "$folder" ]]; then
+        mkdir -p "$folder"
+    fi
+}
+
 function enable_bbr() {
     if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
         echo "Enable BBR..."
@@ -271,6 +278,67 @@ function install_latest_sing_box() {
         echo -e "${RED}Unable to retrieve the download URL for Sing-Box.${NC}"
         return 1
     fi
+}
+
+function download_juicity() {
+    local arch=$(uname -m)
+
+    case $arch in
+        "arm64")
+            arch_suffix="arm64"
+            ;;
+        "armv5")
+            arch_suffix="armv5"
+            ;;
+        "armv6")
+            arch_suffix="armv6"
+            ;;
+        "armv7")
+            arch_suffix="armv7"
+            ;;
+        "mips")
+            arch_suffix="mips32"
+            ;;
+        "mipsel")
+            arch_suffix="mips32le"
+            ;;
+        "mips64")
+            arch_suffix="mips64"
+            ;;
+        "mips64el")
+            arch_suffix="mips64le"
+            ;;
+        "riscv64")
+            arch_suffix="riscv64"
+            ;;
+        "i686")
+            arch_suffix="x86_32"
+            ;;
+        "x86_64")
+            if [ -n "$(grep avx2 /proc/cpuinfo)" ]; then
+                arch_suffix="x86_64_v3_avx2"
+            else
+                arch_suffix="x86_64_v2_sse"
+            fi
+            ;;
+        *)
+            echo "Unsupported architecture: $arch"
+            return 1
+            ;;
+    esac
+
+    local github_api_url="https://api.github.com/repos/juicity/juicity/releases/latest"
+    local download_url=$(curl -s "$github_api_url" | grep "browser_download_url.*$arch_suffix.zip\"" | cut -d '"' -f 4)
+    local temp_dir=$(mktemp -d)
+    local install_path="/usr/local/bin/juicity-server"
+
+    echo "Downloading the latest version of juicity-server..."
+    wget -P "$temp_dir" "$download_url" >/dev/null 2>&1
+    unzip "$temp_dir/*.zip" -d "$temp_dir" >/dev/null 2>&1    
+    mv "$temp_dir/juicity-server" "$install_path" >/dev/null 2>&1
+    chmod +x /usr/local/bin/juicity-server
+    echo "juicity-server has been downloaded."    
+    rm -rf "$temp_dir"
 }
 
 function install_latest_caddy() {
@@ -462,6 +530,35 @@ WantedBy=multi-user.target'
 
         echo "$service_config" >"$service_file"
         echo "TUIC startup service has been configured."
+}
+
+function configure_juicity_service() {
+    echo "Configuring juicity startup service..."
+    local service_file="/etc/systemd/system/juicity.service"
+
+    if [[ -f $service_file ]]; then
+        rm "$service_file"
+    fi
+    
+       local service_config='[Unit]
+Description=juicity-server Service
+Documentation=https://github.com/juicity/juicity
+After=network.target nss-lookup.target
+
+[Service]
+Type=simple
+User=root
+Environment=QUIC_GO_ENABLE_GSO=true
+ExecStart=/usr/local/bin/juicity-server run -c /usr/local/etc/juicity/config.json --disable-timestamp
+Restart=on-failure
+LimitNPROC=512
+LimitNOFILE=infinity
+
+[Install]
+WantedBy=multi-user.target'
+
+        echo "$service_config" >"$service_file"
+        echo "juicity startup service has been configured."
 }
 
 function listen_port() {
@@ -1552,6 +1649,34 @@ function generate_shadowtls_config() {
 }" | jq '.' > "$config_file"
 }
 
+function generate_juicity_config() {
+    local config_file="/usr/local/etc/juicity/config.json"
+    local users=""
+    local certificate=""
+    local private_key=""
+    
+    listen_port
+    generate_uuid
+    set_password
+    users="\"$uuid\": \"$password\""
+
+    set_certificate_and_private_key
+    certificate_path="$certificate_path"
+    private_key_path="$private_key_path"
+    set_congestion_control
+
+    echo "{
+    \"listen\": \":$listen_port\",
+    \"users\": {
+$users
+    },
+    \"certificate\": \"$certificate_path\",
+    \"private_key\": \"$private_key_path\",
+    \"congestion_control\": \"$congestion_control\",
+    \"log_level\": \"info\"
+}" > "$config_file"
+}
+
 function generate_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
 
@@ -1950,6 +2075,25 @@ function display_NaiveProxy_config() {
     echo "配置信息已保存至 $output_file" 
 }
 
+function display_juicity_config() {
+    local config_file="/usr/local/etc/juicity/config.json"
+    local output_file="/usr/local/etc/juicity/output.txt"  
+    local listen_port=$(jq -r '.listen' "$config_file" | sed 's/\://')
+    local UUIDS=$(jq -r '.users | to_entries[] | "UUID:\(.key)\t密码:\(.value)"' "$config_file")
+    local congestion_control=$(jq -r '.congestion_control' "$config_file")
+  
+    echo -e "${CYAN}juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo "监听端口: $listen_port"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo "UUID和密码:"  | tee -a "$output_file" 
+    echo "$UUIDS"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "拥塞控制算法: $congestion_control"  | tee -a "$output_file" 
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "配置信息已保存至 $output_file"    
+}
+
 check_and_restart_services() {
     if [ -f "/etc/systemd/system/tuic.service" ]; then
         systemctl restart tuic.service
@@ -1965,6 +2109,11 @@ check_and_restart_services() {
         systemctl reload caddy.service
         systemctl status --no-pager caddy.service
     fi
+
+    if [ -f "/etc/systemd/system/juicity.service" ]; then
+        systemctl restart juicity.service
+        systemctl status --no-pager juicity.service
+    fi    
 }
 
 function uninstall_sing_box() {
@@ -1999,10 +2148,21 @@ function uninstall_tuic() {
     echo "TUIC 卸载完成。"
 }
 
+function uninstall_juicity() {
+    echo "开始卸载 juicity..."
+    systemctl stop juicity.service
+    systemctl disable juicity.service
+    rm -rf /etc/systemd/system/juicity.service
+    rm -rf /usr/local/etc/juicity
+    rm -rf /usr/local/bin/juicity-server
+    echo "juicity 卸载完成。"
+}
+
 function uninstall() {
     local uninstall_sing_box=false
     local uninstall_caddy=false
     local uninstall_tuic=false
+    local uninstall_juicity=false
 
     if [[ -f "/etc/systemd/system/sing-box.service" ]]; then
         uninstall_sing_box=true
@@ -2016,6 +2176,10 @@ function uninstall() {
         uninstall_tuic=true
     fi
 
+    if [[ -f "/etc/systemd/system/juicity.service" ]]; then
+        uninstall_juicity=true
+    fi    
+
     if [[ "$uninstall_sing_box" == true ]]; then
         uninstall_sing_box
     fi
@@ -2027,6 +2191,26 @@ function uninstall() {
     if [[ "$uninstall_tuic" == true ]]; then
         uninstall_tuic
     fi
+
+    if [[ "$uninstall_juicity" == true ]]; then
+        uninstall_juicity
+    fi    
+}
+
+function juicity_install() {
+    configure_dns64
+    enable_bbr
+    check_juicity_folder   
+    download_juicity
+    generate_juicity_config
+    check_firewall_configuration 
+    ask_certificate_option
+    configure_juicity_service
+    systemctl daemon-reload
+    systemctl enable juicity.service
+    systemctl start juicity.service
+    systemctl restart juicity.service
+    display_juicity_config
 }
 
 function Direct_install() {
@@ -2177,6 +2361,7 @@ function view_saved_config() {
         "/usr/local/etc/sing-box/output.txt"
         "/usr/local/etc/tuic/output.txt"
         "/usr/local/etc/caddy/output.txt"
+        "/usr/local/etc/juicity/output.txt"
     )
 
     local found=false
@@ -2201,50 +2386,54 @@ echo -e "║ ${CYAN}Telegram 群组${NC}: https://t.me/mrxiao758                
 echo -e "║ ${CYAN}YouTube频道${NC}: https://youtube.com/@Mr_xiao502                           ║"
 echo "╠════════════════════════════════════════════════════════════════════════╣"
 echo "║ 请选择要执行的操作：                                                   ║"
-echo -e "║${CYAN} [1]${NC}  TUIC V5                    ${CYAN} [2]${NC}  Vless                            ║"
-echo -e "║${CYAN} [3]${NC}  Direct                     ${CYAN} [4]${NC}  Trojan                           ║"
-echo -e "║${CYAN} [5]${NC}  Hysteria                   ${CYAN} [6]${NC}  ShadowTLS V3                     ║"
-echo -e "║${CYAN} [7]${NC}  NaiveProxy                 ${CYAN} [8]${NC}  Shadowsocks                      ║"
-echo -e "║${CYAN} [9]${NC}  查看节点信息               ${CYAN} [10]${NC} 重启服务                         ║"
-echo -e "║${CYAN} [11]${NC} 卸载                       ${CYAN} [0]${NC}  退出                             ║"
+echo -e "║${CYAN} [1]${NC}  TUIC                   ${CYAN} [2]${NC}  Juicity                              ║"
+echo -e "║${CYAN} [3]${NC}  Vless                  ${CYAN} [4]${NC}  Direct                               ║"
+echo -e "║${CYAN} [5]${NC}  Trojan                 ${CYAN} [6]${NC}  Hysteria                             ║"
+echo -e "║${CYAN} [7]${NC}  ShadowTLS              ${CYAN} [8]${NC}  NaiveProxy                           ║"
+echo -e "║${CYAN} [9]${NC}  Shadowsocks            ${CYAN} [10]${NC} 查看节点信息                         ║"
+echo -e "║${CYAN} [11]${NC} 重启服务               ${CYAN} [12]${NC} 卸载                                 ║"
+echo -e "║${CYAN} [0]${NC}  退出                                                              ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
-    read -p "请选择 [0-11]: " choice
+    read -p "请选择 [0-12]: " choice
 
     case $choice in
         1)
             tuic_install
             ;;
         2)
+            juicity_install
+            ;;            
+        3)
             reality_install
             ;;
-        3)
+        4)
             Direct_install
             ;;
-        4)
+        5)
             trojan_install
             ;;                
-        5)
+        6)
             Hysteria_install
             ;;
-        6)
+        7)
             shadowtls_install
             ;;
-        7)
+        8)
             NaiveProxy_install
             ;;
-        8)
+        9)
             Shadowsocks_install
             ;;                
-        9)
+        10)
             view_saved_config
             ;;
 
-        10)
+        11)
             check_and_restart_services
             ;;
-        11)
+        12)
             uninstall
             ;;       
         0)
