@@ -1,0 +1,25 @@
+{
+    "relay": {
+        "server": "www.example.com:443",  //www.example.com替换为你的域名，443替换为你的监听端口
+        "uuid": "UUID",  //你的UUID
+        "password": "PASSWORD",  //你的PASSWORD 
+        "udp_relay_mode": "quic",
+        "congestion_control": "bbr",
+        "alpn": ["h3", "spdy/3.1"],
+        "zero_rtt_handshake": false,
+        "disable_sni": false,
+        "timeout": "8s",
+        "heartbeat": "3s",
+        "disable_native_certs": false,
+        "send_window": 16777216,
+        "receive_window": 8388608,
+        "gc_interval": "3s",
+        "gc_lifetime": "15s"
+    },
+    "local": {
+        "server": "127.0.0.1:1080",
+        "dual_stack": true,
+        "max_packet_size": 1500
+    },
+    "log_level": "warn"
+}
