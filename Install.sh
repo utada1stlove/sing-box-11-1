@@ -40,11 +40,11 @@ function check_firewall_configuration() {
     fi
 
     if [[ -z $firewall ]]; then
-        echo "未检测到防火墙配置或防火墙未启用，跳过配置防火墙。"
+        echo "No firewall configuration detected or firewall is not enabled, skipping firewall configuration."
         return
     fi
 
-    echo "检查防火墙配置..."
+    echo "Checking firewall configuration..."
 
     case $firewall in
         ufw)
@@ -62,7 +62,7 @@ function check_firewall_configuration() {
             done
 
             ufw reload > /dev/null
-            echo "防火墙配置已更新。"
+            echo "Firewall configuration has been updated."
             ;;
 
         iptables)
@@ -79,7 +79,7 @@ function check_firewall_configuration() {
             done
 
             iptables-save > /etc/sysconfig/iptables > /dev/null 2>&1
-            echo "iptables防火墙配置已更新。"
+            echo "iptables firewall configuration has been updated."
             ;;
 
         firewalld)
@@ -97,11 +97,10 @@ function check_firewall_configuration() {
             done
 
             firewall-cmd --reload > /dev/null 2>&1
-            echo "firewalld防火墙配置已更新。"
+            echo "firewalld firewall configuration has been updated."
             ;;
     esac
 }
-
 
 function check_sing_box_folder() {
     local folder="/usr/local/etc/sing-box"
@@ -136,9 +135,9 @@ function enable_bbr() {
         echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
         echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
         sysctl -p
-        echo "BBR 已开启"
+        echo "BBR has been enabled"
     else
-        echo "BBR 已经开启，跳过配置。"
+        echo "BBR is already enabled, skipping configuration."
     fi
 }
 
@@ -170,7 +169,7 @@ function select_sing_box_install_option() {
 
 function install_go() {
     if ! command -v go &> /dev/null; then
-        echo "正在下载 Go..."
+        echo "Downloading Go..."
         local go_arch
         case $(uname -m) in
             x86_64)
@@ -200,9 +199,9 @@ function install_go() {
         source /etc/profile
         go version
         
-        echo "Go 已安装"
+        echo "Go has been installed."
     else
-        echo "Go 已经安装，跳过安装步骤。"
+        echo "Go is already installed, skipping installation."
     fi
 }
 
@@ -223,15 +222,15 @@ with_gvisor,\
 with_lwip \
 github.com/sagernet/sing-box/cmd/sing-box@latest"
 
-    echo "正在编译安装 sing-box，请稍候..."
+    echo "Compiling and installing sing-box, please wait..."
     $go_install_command
 
     if [[ $? -eq 0 ]]; then
         mv ~/go/bin/sing-box /usr/local/bin/
         chmod +x /usr/local/bin/sing-box
-        echo "sing-box 编译安装成功。"
+        echo "sing-box has been compiled and installed successfully."
     else
-        echo -e "${RED}sing-box 编译安装失败。${NC}"
+        echo -e "${RED}sing-box compilation and installation failed.${NC}"
         exit 1
     fi
 }
@@ -261,15 +260,15 @@ function install_latest_sing_box() {
     esac
 
     if [ -n "$download_url" ]; then
-        echo "正在下载 Sing-Box..."
+        echo "Downloading Sing-Box..."
         wget -qO sing-box.tar.gz "$download_url" 2>&1 >/dev/null
         tar -xzf sing-box.tar.gz -C /usr/local/bin --strip-components=1
         rm sing-box.tar.gz
         chmod +x /usr/local/bin/sing-box
 
-        echo "Sing-Box 安装成功。"
+        echo "Sing-Box installed successfully."
     else
-        echo -e "${RED}无法获取 Sing-Box 的下载 URL。${NC}"
+        echo -e "${RED}Unable to retrieve the download URL for Sing-Box.${NC}"
         return 1
     fi
 }
@@ -308,23 +307,23 @@ function install_latest_caddy() {
     local latest_version=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | grep -o '"tag_name": "v.*"' | cut -d'"' -f4)
     local download_url="https://github.com/caddyserver/caddy/releases/download/$latest_version/caddy_${latest_version:1}_linux_$architecture.tar.gz"
 
-    echo "正在下载 Caddy $latest_version 版本..."
+    echo "Downloading Caddy version $latest_version..."
     wget -q -O caddy.tar.gz $download_url
     tar -xf caddy.tar.gz -C /usr/bin/
     chmod +x /usr/bin/caddy
     rm caddy.tar.gz
     
-    echo "Caddy安装完成。"
+    echo "Caddy has been installed."
 }
 
 function install_caddy() {
-    echo "安装 xcaddy..."
+    echo "Installing xcaddy..."
     go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
     ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
     setcap cap_net_bind_service=+ep ./caddy
 
     mv caddy /usr/bin/
-    echo "Caddy 安装完成。"
+    echo "Caddy installation completed."
 }
 
 function download_tuic() {
@@ -354,24 +353,28 @@ function download_tuic() {
     local download_url=$(curl -sL "$releases_url" | grep -Eo "https://github.com/[^[:space:]]+/releases/download/[^[:space:]]+$arch" | head -1)
 
     if [ -z "$download_url" ]; then
-        echo -e "${RED}获取最新版 TUIC 程序下载链接失败。${NC}"
+        echo -e "${RED}Failed to retrieve the latest TUIC program download link.${NC}"
         exit 1
     fi
 
-    echo "正在下载最新版 TUIC 程序..."
+    if [ -e "/usr/local/bin/tuic" ]; then
+        rm /usr/local/bin/tuic
+    fi    
+
+    echo "Downloading the latest TUIC program..."
     wget -O /usr/local/bin/tuic "$download_url" >/dev/null 2>&1
 
     if [ $? -ne 0 ]; then
-        echo -e "${RED}下载 TUIC 程序失败。${NC}"
+        echo -e "${RED}Failed to download the TUIC program.${NC}"
         exit 1
     fi
 
     chmod +x /usr/local/bin/tuic
-    echo "TUIC 程序下载并安装完成。"
+    echo "TUIC program download and installation completed."
 }
 
 function configure_sing_box_service() {
-    echo "配置 sing-box 开机自启服务..."
+    echo "Configuring sing-box startup service..."
     local service_file="/etc/systemd/system/sing-box.service"
 
     if [[ -f $service_file ]]; then
@@ -396,11 +399,11 @@ LimitNOFILE=infinity
 WantedBy=multi-user.target'
 
         echo "$service_config" >"$service_file"
-        echo "sing-box 开机自启动服务已配置。"
+        echo "sing-box startup service has been configured."
 }
 
 function configure_caddy_service() {
-    echo "配置 Caddy 开机自启动服务..."
+    echo "Configuring Caddy startup service..."
     local service_file="/etc/systemd/system/caddy.service"
 
     if [[ -f $service_file ]]; then
@@ -428,11 +431,11 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 WantedBy=multi-user.target'
 
         echo "$service_config" >"$service_file"
-        echo "Caddy 开机自启动服务已配置。"
+        echo "Caddy startup service has been configured."
 }
 
 function configure_tuic_service() {
-    echo "配置TUIC开机自启服务..."
+    echo "Configuring TUIC startup service..."
     local service_file="/etc/systemd/system/tuic.service"
 
     if [[ -f $service_file ]]; then
@@ -458,7 +461,7 @@ LimitNOFILE=infinity
 WantedBy=multi-user.target'
 
         echo "$service_config" >"$service_file"
-        echo "TUIC 开机自启动服务已配置。"
+        echo "TUIC startup service has been configured."
 }
 
 function listen_port() {
@@ -502,39 +505,53 @@ function web_port() {
 }
 
 function override_address() {
-    local is_valid_address=false
-
-    while [[ "$is_valid_address" == "false" ]]; do
-        read -p "请输入目标地址: " override_address
-
-        if [[ $override_address =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-            IFS='.' read -r -a address_fields <<< "$override_address"
-            is_valid_ip=true
-            for field in "${address_fields[@]}"; do
-                if [[ "$field" -lt 0 || "$field" -gt 255 ]]; then
-                    is_valid_ip=false
-                    break
-                fi
-            done
-
-            if [[ "$is_valid_ip" == "true" ]]; then
-                is_valid_address=true
-            else
-                echo -e "${RED}错误：IP地址字段必须在0到255之间，请重新输入。${NC}"
-            fi
+  while true; do
+    read -p "请输入目标地址（IP或域名）: " target_address
+    if [[ -n "$target_address" ]]; then
+      if [[ $target_address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [[ $(grep -o '\.' <<< "$target_address" | wc -l) -eq 3 ]]; then
+          break
         else
-            echo -e "${RED}错误：请输入合法的IPv4地址，格式为 0.0.0.0${NC}"
+          echo -e "${RED}错误：请输入有效的 IPv4 地址！${NC}"
         fi
-    done
+      elif [[ $target_address =~ ^[a-fA-F0-9:]+$ ]]; then
+        if [[ $(grep -o ':' <<< "$target_address" | wc -l) -ge 2 ]]; then
+          break
+        else
+          echo -e "${RED}错误：请输入有效的 IPv6 地址！${NC}"
+        fi
+      else
+        resolved_ips=$(host -t A "$target_address" | awk '/has address/ { print $4 }')
+        if [[ -n "$resolved_ips" ]]; then
+          valid_ip=0
+          for ip in $resolved_ips; do
+            if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              valid_ip=1
+              break
+            fi
+          done
+          if [[ $valid_ip -eq 1 ]]; then
+            break
+          else
+            echo -e "${RED}错误：域名未解析为有效的 IPv4 地址，请重新输入！${NC}"
+          fi
+        else
+          echo -e "${RED}错误：请输入有效的 IP 地址或域名！${NC}"
+        fi
+      fi
+    else
+      echo -e "${RED}错误：目标地址不能为空！${NC}"
+    fi
+  done
 }
 
 function encryption_method() {
     while true; do
-        read -p "请选择加密方式：
+        read -p "请选择加密方式(默认3)：
 1). 2022-blake3-aes-128-gcm
 2). 2022-blake3-aes-256-gcm
 3). 2022-blake3-chacha20-poly1305
-请输入对应的数字 (默认3): " encryption_choice
+请选择[1-3]: " encryption_choice
         encryption_choice=${encryption_choice:-3}
 
         case $encryption_choice in
@@ -580,17 +597,17 @@ function get_fake_domain() {
 function get_domain() {
     while true; do
         read -p "请输入域名（用于自动申请证书）: " domain
-        
+
         local_ip_v4=$(hostname -I | awk '{print $1}')
         local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
-  
+
         resolved_ipv4=$(dig +short A "$domain" 2>/dev/null)
         resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
 
         if [[ -z $domain ]]; then
-            echo -e "${RED}域名不能为空，请重新输入。${NC}"
+            echo -e "${RED}错误：域名不能为空，请重新输入。${NC}"
         else
-            if [[ "$resolved_ipv4" == "$local_ip_v4" || "$resolved_ipv6" == "$local_ip_v6" ]]; then
+            if [[ ("$resolved_ipv4" == "$local_ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$local_ip_v6" && ! -z "$resolved_ipv6") ]]; then
                 break
             else
                 echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
@@ -599,8 +616,9 @@ function get_domain() {
     done
 }
 
+
 function test_caddy_config() {
-    echo "测试 Caddy 配置文件..."
+    echo "Testing Caddy configuration file..."
     local output
     local caddy_pid
 
@@ -610,10 +628,10 @@ function test_caddy_config() {
     wait $caddy_pid 2>/dev/null
 
     if echo "$output" | grep -i "error"; then
-        echo -e "${RED}Caddy 配置测试未通过，请检查配置文件${NC}"
+        echo -e "${RED}Caddy configuration test failed. Please check the configuration file.${NC}"
         echo "$output" | grep -i "error" --color=always 
     else
-        echo "Caddy 配置测试通过。"
+        echo "Caddy configuration test passed."
     fi
 }
 
@@ -702,7 +720,7 @@ function set_congestion_control() {
 1). bbr
 2). cubic
 3). new_reno
-请输入对应的数字: " congestion_control
+请选择[1-3]: " congestion_control
 
         case $congestion_control in
             1)
@@ -733,17 +751,17 @@ function ask_certificate_option() {
         read -p "请选择证书来源：
 1). 自动申请证书
 2). 自备证书
-请输入对应的数字: " certificate_option
+请选择[1-2]: " certificate_option
 
         case $certificate_option in
             1)
-                echo "已选择自动申请证书。"
+                echo "You have chosen to automatically request a certificate."
                 get_domain
                 apply_certificate "$domain" "$private_key_path" "$certificate_path"
                 break
                 ;;
             2)
-                echo "已选择自备证书。"
+                echo "You have chosen to use your own certificate."
                 break
                 ;;
 
@@ -762,7 +780,7 @@ function apply_certificate() {
         has_ipv4=true
     fi
     
-    echo "正在申请证书..."
+    echo "Requesting a certificate..."
     curl -s https://get.acme.sh | sh -s email=example@gmail.com
     alias acme.sh=~/.acme.sh/acme.sh
     ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
@@ -773,7 +791,7 @@ function apply_certificate() {
         ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6
     fi
 
-    echo "安装证书..."
+    echo "Installing the certificate..."
     certificate_path=$(~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path")
 
     set_certificate_path="$certificate_path"
@@ -876,7 +894,7 @@ function generate_server_name_config() {
 
     read -p "请输入可用的 serverName 列表 (默认为 www.gov.hk): " user_input
     
-    echo "正在验证服务器支持的TLS版本..." >&2
+    echo "Verifying server's TLS version support..." >&2
     
     if [[ -n "$user_input" ]]; then
         server_name="$user_input"
@@ -897,7 +915,7 @@ function generate_target_server_config() {
 
     read -p "请输入目标网站地址(默认为 www.gov.hk): " user_input
     
-    echo "正在验证服务器支持的TLS版本..." >&2
+    echo "Verifying server's TLS version support..." >&2
     
     if [[ -n "$user_input" ]]; then
         target_server="$user_input"
@@ -946,10 +964,10 @@ function select_flow_type() {
     local flow_type="xtls-rprx-vision"
 
     while true; do
-        read -p "请选择流控类型：
-1). xtls-rprx-vision（vless+vision+reality)
-2). 留空(vless+h2/grpc+reality)
-请输入选项 (默认为 xtls-rprx-vision): " flow_option
+        read -p "请选择节点类型 (默认1)：
+1). vless+vision+reality
+2). vless+h2/grpc+reality
+请选择[1-2]: " flow_option
 
         case $flow_option in
             "" | 1)
@@ -1023,10 +1041,10 @@ function generate_flow_config() {
     local transport_type=""
 
     while true; do
-        read -p "请选择传输层协议：
+        read -p "请选择传输层协议(默认1)：
 1). http
 2). grpc
-请输入选项 (默认为 http): " transport_option
+请选择[1-2]: " transport_option
 
         case $transport_option in
             1)
@@ -1110,11 +1128,14 @@ function generate_user_config() {
 
 function prompt_setup_type() {
     while true; do
-        echo "请选择传输层协议："
+        echo "请选择传输层协议（默认1）："
         echo "1). TCP（trojan+tcp+tls+web）"
         echo "2). ws（trojan+ws+tls+CDN）"
 
         read -p "请选择 [1-2]: " setup_type
+        if [ -z "$setup_type" ]; then
+            setup_type="1"
+        fi
 
         case $setup_type in
             1)
@@ -1223,14 +1244,14 @@ function generate_Direct_config() {
     {
       \"type\": \"direct\",
       \"tag\": \"direct-in\",
-      \"listen\": \"0.0.0.0\",
+      \"listen\": \"::\",
       \"listen_port\": $listen_port,
       \"sniff\": true,
       \"sniff_override_destination\": true,
       \"sniff_timeout\": \"300ms\",
       \"proxy_protocol\": false,
       \"network\": \"tcp\",
-      \"override_address\": \"$override_address\",
+      \"override_address\": \"$target_address\",
       \"override_port\": $override_port
     }
   ],
@@ -1589,7 +1610,6 @@ $short_ids
     }
   ]
 }"
-
     echo "$config_content" > "$config_file" 
     check_firewall_configuration       
 }
@@ -1675,7 +1695,6 @@ function generate_caddy_config() {
     }
   }
 }"
-
   echo "$caddy_config" > /usr/local/etc/caddy/caddy.json
 }
 
@@ -1724,7 +1743,6 @@ function generate_trojan_config() {
     }
   ]
 }"
-
     echo "$sing_box_config" > /usr/local/etc/sing-box/config.json
 }
 
@@ -1932,43 +1950,21 @@ function display_NaiveProxy_config() {
     echo "配置信息已保存至 $output_file" 
 }
 
-function restart_sing_box_service() {
-    echo "重启 sing-box 服务..."
-    systemctl restart sing-box
-
-    if [[ $? -eq 0 ]]; then
-        echo "sing-box 服务已重启。"
-    else
-        echo -e "${RED}重启 sing-box 服务失败。${NC}"
+check_and_restart_services() {
+    if [ -f "/etc/systemd/system/tuic.service" ]; then
+        systemctl restart tuic.service
+        systemctl status --no-pager tuic.service
     fi
 
-    systemctl status sing-box
-}
-
-function restart_naiveproxy_service() {
-    echo "重启 naiveproxy 服务..."
-    systemctl reload caddy
-
-    if [[ $? -eq 0 ]]; then
-        echo "naiveproxy 服务已重启。"
-    else
-        echo -e "${RED}重启 naiveproxy 服务失败。${NC}"
+    if [ -f "/etc/systemd/system/sing-box.service" ]; then
+        systemctl restart sing-box.service
+        systemctl status --no-pager sing-box.service
     fi
 
-    systemctl status caddy
-}
-
-function restart_tuic_service() {
-    echo "重启 TUIC 服务..."
-    systemctl restart tuic.service
-
-    if [[ $? -eq 0 ]]; then
-        echo "TUIC 服务已重启。"
-    else
-        echo -e "${RED}重启 TUIC 服务失败。${NC}"
+    if [ -f "/etc/systemd/system/caddy.service" ]; then
+        systemctl reload caddy.service
+        systemctl status --no-pager caddy.service
     fi
-
-    systemctl status tuic.service   
 }
 
 function uninstall_sing_box() {
@@ -2025,7 +2021,7 @@ function uninstall() {
     fi
 
     if [[ "$uninstall_caddy" == true ]]; then
-        uninstall_caddy
+        uninstall_naiveproxy
     fi
 
     if [[ "$uninstall_tuic" == true ]]; then
@@ -2198,30 +2194,23 @@ function view_saved_config() {
 }
 
 function main_menu() {
-    echo -e "${CYAN}               ------------------------------------------------------------------------------------ ${NC}"
-    echo -e "${CYAN}               |                          欢迎使用 Mr. xiao 安装脚本                              |${NC}"
-    echo -e "${CYAN}               |                      项目地址:https://github.com/TinrLin                         |${NC}"
-    echo -e "${CYAN}               |                 YouTube频道地址:https://youtube.com/@Mr_xiao502                  |${NC}" 
-    echo -e "${CYAN}               |                             转载请注明出处，谢谢！                               |${NC}"       
-    echo -e "${CYAN}               ------------------------------------------------------------------------------------${NC}"
-    echo -e "${CYAN}请选择要执行的操作：${NC}"
-    echo -e "${CYAN}1)   TUIC V5${NC}"         
-    echo -e "${CYAN}2)   Vless${NC}"
-    echo -e "${CYAN}3)   Direct${NC}"
-    echo -e "${CYAN}4)   Trojan${NC}"
-    echo -e "${CYAN}5)   Hysteria${NC}"                   
-    echo -e "${CYAN}6)   ShadowTLS V3${NC}"
-    echo -e "${CYAN}7)   NaiveProxy${NC}"            
-    echo -e "${CYAN}8)   Shadowsocks${NC}"
-    echo -e "${CYAN}9)   查看配置信息${NC}"
-    echo -e "${CYAN}10)  重启 TUIC 服务${NC}"
-    echo -e "${CYAN}11)  重启 Caddy 服务${NC}"
-    echo -e "${CYAN}12)  重启 sing-box 服务${NC}"
-    echo -e "${CYAN}13)  卸载脚本${NC}"
-    echo -e "${CYAN}0)   退出脚本${NC}"
+echo "╔════════════════════════════════════════════════════════════════════════╗"
+echo -e "║ ${CYAN}作者${NC}： Mr. xiao                                                        ║"
+echo -e "║ ${CYAN}项目地址${NC}: https://github.com/TinrLin                                   ║"
+echo -e "║ ${CYAN}Telegram 群组${NC}: https://t.me/mrxiao758                                  ║"
+echo -e "║ ${CYAN}YouTube频道${NC}: https://youtube.com/@Mr_xiao502                           ║"
+echo "╠════════════════════════════════════════════════════════════════════════╣"
+echo "║ 请选择要执行的操作：                                                   ║"
+echo -e "║${CYAN} [1]${NC}  TUIC V5                    ${CYAN} [2]${NC}  Vless                            ║"
+echo -e "║${CYAN} [3]${NC}  Direct                     ${CYAN} [4]${NC}  Trojan                           ║"
+echo -e "║${CYAN} [5]${NC}  Hysteria                   ${CYAN} [6]${NC}  ShadowTLS V3                     ║"
+echo -e "║${CYAN} [7]${NC}  NaiveProxy                 ${CYAN} [8]${NC}  Shadowsocks                      ║"
+echo -e "║${CYAN} [9]${NC}  查看节点信息               ${CYAN} [10]${NC} 重启服务                         ║"
+echo -e "║${CYAN} [11]${NC} 卸载                       ${CYAN} [0]${NC}  退出                             ║"
+echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
-    read -p "请选择 [0-13]: " choice
+    read -p "请选择 [0-11]: " choice
 
     case $choice in
         1)
@@ -2253,17 +2242,11 @@ function main_menu() {
             ;;
 
         10)
-            restart_tuic_service
+            check_and_restart_services
             ;;
         11)
-            restart_naiveproxy_service
-            ;;
-        12)
-            restart_sing_box_service
-            ;;
-        13)
             uninstall
-            ;;        
+            ;;       
         0)
             echo "感谢使用 Mr. xiao 安装脚本！再见！"
             exit 0
