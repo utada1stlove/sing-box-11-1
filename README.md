@@ -1,6 +1,7 @@
 # **Description**
 ### This script supports vps of IPV6 single-stack network.
-### The script supports CentOS 8+, Debian 10+, Ubuntu 20+ operating systems.
+### This script supports CentOS 8+, Debian 10+, Ubuntu 20+ operating systems.
+### This script supports warp to unlock ChatGPT, Netflix,Disney+.
 
 # **Installation**
 ```
@@ -17,6 +18,7 @@ bash <(curl -L https://raw.githubusercontent.com/TinrLin/script_installation/mai
 # **Supported node types in this script**
 - **TUIC V5**
 - **juicity**
+- **WireGuard**
 - **Vless+vision+Reality**
 - **Vless+h2+Reality**
 - **Vless+gRPC+Reality**
