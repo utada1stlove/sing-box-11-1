@@ -620,7 +620,7 @@ function generate_uuid() {
     echo "生成的UUID：$uuid"
 }
 
-generate_transport_config() {
+function generate_transport_config() {
     if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
         transport_config=""
     else
@@ -1513,7 +1513,6 @@ function generate_shadowtls_config() {
     mv "$config_file.tmp" "$config_file"
 }
 
-
 function generate_juicity_config() {
     local config_file="/usr/local/etc/juicity/config.json"
     local users=""
@@ -1561,9 +1560,6 @@ function generate_reality_config() {
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
-
-
-
 
 function generate_trojan_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
@@ -2228,11 +2224,12 @@ function trojan_install() {
     configure_dns64
     enable_bbr
     create_sing_box_folder
-    create_caddy_folder
+    log_outbound_config      
+    create_caddy_folder    
     select_sing_box_install_option
     configure_sing_box_service
     install_latest_caddy
-    configure_caddy_service
+    configure_caddy_service    
     prompt_setup_type
     listen_port
     set_password
@@ -2245,6 +2242,7 @@ function trojan_install() {
     check_firewall_configuration
     test_caddy_config
     generate_trojan_config
+    modify_format_inbounds 
     check_firewall_configuration 
     systemctl daemon-reload
     systemctl enable caddy
