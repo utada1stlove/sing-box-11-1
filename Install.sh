@@ -2111,8 +2111,9 @@ function Direct_install() {
     modify_format_inbounds
     check_firewall_configuration 
     systemctl daemon-reload   
-    systemctl enable sing-box   
+    systemctl enable sing-box
     systemctl start sing-box
+    systemctl restart sing-box
     display_Direct_config
 }
 
@@ -2131,6 +2132,7 @@ function Shadowsocks_install() {
     systemctl daemon-reload   
     systemctl enable sing-box   
     systemctl start sing-box
+    systemctl restart sing-box
     display_Shadowsocks_config
 }
 
@@ -2149,6 +2151,7 @@ function NaiveProxy_install() {
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
+    systemctl restart sing-box
     display_NaiveProxy_config
 }
 
@@ -2167,6 +2170,7 @@ function tuic_install() {
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
+    systemctl restart sing-box
     display_tuic_config
 }
 
@@ -2185,6 +2189,7 @@ function Hysteria_install() {
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
+    systemctl restart sing-box
     display_Hysteria_config
 }
 
@@ -2201,6 +2206,7 @@ function shadowtls_install() {
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
+    systemctl restart sing-box
     display_shadowtls_config
 }
 
@@ -2217,6 +2223,7 @@ function reality_install() {
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
+    systemctl restart sing-box
     display_reality_config
 }
 
@@ -2249,6 +2256,7 @@ function trojan_install() {
     systemctl enable sing-box 
     systemctl start caddy
     systemctl start sing-box
+    systemctl restart sing-box
     display_trojan_config
 }
 
@@ -2262,8 +2270,7 @@ function wireguard_install() {
     get_temp_config_file
     extract_variables_and_cleanup
     update_outbound_file
-    systemctl stop sing-box
-    systemctl start sing-box
+    systemctl restart sing-box
 }
 
 function main_menu() {
