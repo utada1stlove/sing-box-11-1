@@ -744,9 +744,9 @@ function generate_private_key_config() {
 
 function generate_server_name() {
     while true; do
-        read -p "请输入可用的 serverName 列表 (默认为 www.gov.hk): " user_input
+        read -p "请输入可用的 serverName 列表 (默认为 nijigen-works.jp): " user_input
         if [[ -z "$user_input" ]]; then
-            server_name="www.gov.hk"
+            server_name="nijigen-works.jp"
             break
         else
             server_name="$user_input"
@@ -773,10 +773,10 @@ function generate_server_name() {
 
 function generate_target_server() {
     while true; do
-        read -p "请输入目标网站地址(默认为 www.gov.hk): " user_input
+        read -p "请输入目标网站地址(默认为 nijigen-works.jp): " user_input
 
         if [[ -z "$user_input" ]]; then
-            target_server="www.gov.hk"
+            target_server="nijigen-works.jp"
             break
         else
             target_server="$user_input"
