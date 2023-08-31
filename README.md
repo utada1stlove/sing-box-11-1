@@ -2,6 +2,7 @@
 ### This script supports vps of IPV6 single-stack network.
 ### This script supports CentOS 8+, Debian 10+, Ubuntu 20+ operating systems.
 ### This script supports warp to unlock ChatGPT, Netflix,Disney+.
+### This script supports multi-protocol coexistence.
 
 # **Installation**
 ```
