@@ -47,99 +47,99 @@ function check_firewall_configuration() {
     echo "Checking firewall configuration..."
     case $firewall in
         ufw)
-            if ! ufw status | grep -q "Status: active"; then
-                ufw enable
+            if ! ufw status | grep -q "Status: active" 2>/dev/null; then
+                ufw enable > /dev/null 2>&1
             fi
 
-            if ! ufw status | grep -q " $listen_port"; then
-                ufw allow "$listen_port"
+            if ! ufw status | grep -q " $listen_port" 2>/dev/null; then
+                ufw allow "$listen_port" > /dev/null 2>&1
             fi
 
-            if ! ufw status | grep -q " $override_port"; then
-                ufw allow "$override_port"
+            if ! ufw status | grep -q " $override_port" 2>/dev/null; then
+                ufw allow "$override_port" > /dev/null 2>&1
             fi
 
-            if ! ufw status | grep -q " $fallback_port"; then
-                ufw allow "$fallback_port"
+            if ! ufw status | grep -q " $fallback_port" 2>/dev/null; then
+                ufw allow "$fallback_port" > /dev/null 2>&1
             fi
             
-            if ! ufw status | grep -q " 80"; then
-                ufw allow 80
+            if ! ufw status | grep -q " 80" 2>/dev/null; then
+                ufw allow 80 > /dev/null 2>&1
             fi
 
             echo "Firewall configuration has been updated."
             ;;
        iptables)
             if ! iptables -C INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT
+                iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT > /dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$listen_port" -j ACCEPT
+                iptables -A INPUT -p udp --dport "$listen_port" -j ACCEPT > /dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p tcp --dport "$override_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$override_port" -j ACCEPT
+                iptables -A INPUT -p tcp --dport "$override_port" -j ACCEPT > /dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport "$override_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$override_port" -j ACCEPT
+                iptables -A INPUT -p udp --dport "$override_port" -j ACCEPT > /dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p tcp --dport "$fallback_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport "$fallback_port" -j ACCEPT
+                iptables -A INPUT -p tcp --dport "$fallback_port" -j ACCEPT > /dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport "$fallback_port" -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport "$fallback_port" -j ACCEPT
+                iptables -A INPUT -p udp --dport "$fallback_port" -j ACCEPT > /dev/null 2>&1
             fi            
 
             if ! iptables -C INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+                iptables -A INPUT -p tcp --dport 80 -j ACCEPT > /dev/null 2>&1
             fi
 
             if ! iptables -C INPUT -p udp --dport 80 -j ACCEPT >/dev/null 2>&1; then
-                iptables -A INPUT -p udp --dport 80 -j ACCEPT
+                iptables -A INPUT -p udp --dport 80 -j ACCEPT > /dev/null 2>&1
             fi
 
-            iptables-save > /etc/sysconfig/iptables
+            iptables-save > /etc/sysconfig/iptables > /dev/null 2>&1
 
             echo "Firewall configuration has been updated."
             ;;
         firewalld)
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp"; then
-                firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/udp"; then
-                firewall-cmd --zone=public --add-port="$listen_port/udp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/udp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port="$listen_port/udp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/tcp"; then
-                firewall-cmd --zone=public --add-port="$override_port/tcp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/tcp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port="$override_port/tcp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/udp"; then
-                firewall-cmd --zone=public --add-port="$override_port/udp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$override_port/udp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port="$override_port/udp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/tcp"; then
-                firewall-cmd --zone=public --add-port="$fallback_port/tcp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/tcp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port="$fallback_port/tcp" --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/udp"; then
-                firewall-cmd --zone=public --add-port="$fallback_port/udp" --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "$fallback_port/udp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port="$fallback_port/udp" --permanent > /dev/null 2>&1
             fi            
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "80/tcp"; then
-                firewall-cmd --zone=public --add-port=80/tcp --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "80/tcp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port=80/tcp --permanent > /dev/null 2>&1
             fi
 
-            if ! firewall-cmd --zone=public --list-ports | grep -q "80/udp"; then
-                firewall-cmd --zone=public --add-port=80/udp --permanent
+            if ! firewall-cmd --zone=public --list-ports | grep -q "80/udp" 2>/dev/null; then
+                firewall-cmd --zone=public --add-port=80/udp --permanent > /dev/null 2>&1
             fi
 
-            firewall-cmd --reload
+            firewall-cmd --reload > /dev/null 2>&1
 
             echo "Firewall configuration has been updated."
             ;;
@@ -159,7 +159,6 @@ function create_caddy_folder() {
     if [[ ! -d "$folder" ]]; then
         mkdir -p "$folder"
     fi
-    touch "$folder/caddy.json"
 }
 
 function create_ssl_folder() {
@@ -185,6 +184,29 @@ function check_config_file_existence() {
     fi
 }
 
+function check_sing_box_existence() {
+    if [[ -f "/usr/local/bin/sing-box" ]]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+function install_sing_box() {
+    check_sing_box_existence
+    local result=$?
+        
+    if [[ $result -eq 0 ]]; then
+        configure_dns64
+        enable_bbr
+        select_sing_box_install_option
+        configure_sing_box_service
+        create_sing_box_folder
+        create_ssl_folder
+        
+    fi    
+}
+
 function enable_bbr() {
     if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
         echo "Enable BBR..."
@@ -199,21 +221,23 @@ function enable_bbr() {
 
 function select_sing_box_install_option() {
     while true; do
-        echo "请选择 sing-box 的安装方式："
-        echo "1). 编译安装sing-box（支持全部功能）"
-        echo "2). 下载安装sing-box（支持部分功能）"
+        echo "请选择 sing-box 的安装方式（默认1）："
+        echo "1). 下载安装 sing-box（官方稳定版）"
+        echo "2). 编译安装 sing-box（低配置服务器慎用）"
 
         local install_option
         read -p "请选择 [1-2]: " install_option
+        install_option="${install_option:-1}"
 
         case $install_option in
             1)
-                install_go
-                compile_install_sing_box
+                install_latest_sing_box
                 break
                 ;;
+        
             2)
-                install_latest_sing_box
+                install_go
+                compile_install_sing_box
                 break
                 ;;
             *)
@@ -817,7 +841,10 @@ function get_domain() {
             if [[ ("$resolved_ipv4" == "$local_ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$local_ip_v6" && ! -z "$resolved_ipv6") ]]; then
                 break
             else
-                echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
+                ping -c 1 "$domain" &>/dev/null
+                if [[ $? -ne 0 ]]; then
+                    echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
+                fi
             fi
         fi
     done
@@ -842,7 +869,7 @@ function test_caddy_config() {
     local output
     local caddy_pid
 
-    output=$(timeout 15 /usr/bin/caddy run --environ --config /usr/local/etc/caddy/caddy.json 2>&1 &)
+    output=$(timeout 8 /usr/bin/caddy run --environ --config /usr/local/etc/caddy/caddy.json 2>&1 &)
     caddy_pid=$!
 
     wait $caddy_pid 2>/dev/null
@@ -1346,7 +1373,7 @@ function trojan_multiple_users() {
     users+=$'\n      ]'
 }
 
-function prompt_and_generate_transport_config() {
+function prompt_and_generate_transport_config() {    
     if [[ $setup_type == 2 ]]; then
         read -p "请输入 ws 路径 (默认随机生成): " transport_path_input
         transport_path=${transport_path_input:-/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)}
@@ -1363,11 +1390,10 @@ function prompt_and_generate_transport_config() {
     fi
 
     if [[ $setup_type == 1 ]]; then
-        h1h2c_port=$(grep -oE '"listen": \["127.0.0.1:[0-9]+"],' /usr/local/etc/caddy/caddy.json | cut -d':' -f3 | tr -d '",[]' | head -n 1)
         echo ",
       \"fallback\": {
         \"server\": \"127.0.0.1\",
-        \"server_port\": $h1h2c_port
+        \"server_port\": $fallback_port
       }"
     fi
 }
@@ -1563,16 +1589,15 @@ function generate_reality_config() {
 
 function generate_trojan_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    server_name=$(grep -oE '"automate": \["[^"]+"' /usr/local/etc/caddy/caddy.json | cut -d'"' -f4)
-
-    awk -v listen_port="$listen_port" -v users="$users" -v server_name="$server_name" -v transport_and_fallback_config="$transport_and_fallback_config" '
+        
+    awk -v listen_port="$listen_port" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" -v transport_and_fallback_config="$transport_and_fallback_config" '
         /"inbounds": \[/{found=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"trojan-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\","; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ],"; print "        \"certificate_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" server_name "/" server_name ".crt\","; print "        \"key_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" server_name "/" server_name ".key\""; print "      }" transport_and_fallback_config; print "    },"; found=0}
+        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"trojan-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ],"; print "        \"certificate_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" domain "/" domain ".crt\","; print "        \"key_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" domain "/" domain ".key\""; print "      }" transport_and_fallback_config; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
-}    
-
+} 
+  
 function generate_caddy_config() {
     local caddy_config="/usr/local/etc/caddy/caddy.json"
 
@@ -1982,8 +2007,6 @@ function display_juicity_config() {
 function view_saved_config() {
     local config_paths=(
         "/usr/local/etc/sing-box/output.txt"
-        "/usr/local/etc/tuic/output.txt"
-        "/usr/local/etc/caddy/output.txt"
         "/usr/local/etc/juicity/output.txt"
     )
 
@@ -2001,7 +2024,7 @@ function view_saved_config() {
     fi
 }
 
-check_and_restart_services() {
+function check_and_restart_services() {
     if [ -f "/etc/systemd/system/sing-box.service" ]; then
         systemctl restart sing-box.service
         systemctl status --no-pager sing-box.service
@@ -2055,17 +2078,17 @@ function uninstall() {
     local uninstall_caddy=false
     local uninstall_juicity=false
 
-    if [[ -f "/etc/systemd/system/sing-box.service" ]]; then
+    if [[ -f "/etc/systemd/system/sing-box.service" ]] || [[ -f "/usr/local/bin/sing-box" ]] || [[ -d "/usr/local/etc/sing-box/" ]]; then
         uninstall_sing_box=true
     fi
     
-    if [[ -f "/etc/systemd/system/caddy.service" ]]; then
+    if [[ -f "/etc/systemd/system/caddy.service" ]] || [[ -f "/usr/bin/caddy" ]] || [[ -d "/usr/local/etc/caddy" ]]; then
         uninstall_caddy=true
     fi
 
-    if [[ -f "/etc/systemd/system/juicity.service" ]]; then
+    if [[ -f "/etc/systemd/system/juicity.service" ]] || [[ -f "/usr/local/bin/juicity-server" ]] || [[ -d "/usr/local/etc/juicity/" ]]; then
         uninstall_juicity=true
-    fi    
+    fi
 
     if [[ "$uninstall_sing_box" == true ]]; then
         uninstall_sing_box
@@ -2078,6 +2101,88 @@ function uninstall() {
     if [[ "$uninstall_juicity" == true ]]; then
         uninstall_juicity
     fi    
+}
+
+
+function check_vless_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "vless-in"" "$config_file"; then
+        echo -e "${RED}vless 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_tuic_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "tuic-in"" "$config_file"; then
+        echo -e "${RED}TUIC 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_direct_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "direct-in"" "$config_file"; then
+        echo -e "${RED}Direct 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_trojan_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "trojan-in"" "$config_file"; then
+        echo -e "${RED}Trojan 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_hysteria_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "hysteria-in"" "$config_file"; then
+        echo -e "${RED}Hysteria 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_shadowtls_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "st-in"" "$config_file"; then
+        echo -e "${RED}ShadowTLS 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_naive_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "naive-in"" "$config_file"; then
+        echo -e "${RED}NaiveProxy 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_Shadowsocks_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q ""tag": "ss-in"" "$config_file"; then
+        echo -e "${RED}Shadowsocks 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_wireguard_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -q "wireguard" "$config_file"; then
+        echo -e "${RED}Warp 已安装，请勿重复安装！${NC}"
+        exit 1
+    fi
 }
 
 function juicity_install() {
@@ -2098,11 +2203,8 @@ function juicity_install() {
 }
 
 function Direct_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option
-    configure_sing_box_service
-    create_sing_box_folder
+    install_sing_box
+    check_direct_config
     log_outbound_config    
     listen_port
     override_address
@@ -2118,11 +2220,8 @@ function Direct_install() {
 }
 
 function Shadowsocks_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option
-    configure_sing_box_service
-    create_sing_box_folder
+    install_sing_box
+    check_Shadowsocks_config
     log_outbound_config    
     listen_port
     encryption_method
@@ -2137,17 +2236,13 @@ function Shadowsocks_install() {
 }
 
 function NaiveProxy_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option
-    create_ssl_folder      
-    create_sing_box_folder
+    install_sing_box
+    check_naive_config  
     log_outbound_config        
     generate_naive_config
     modify_format_inbounds    
     check_firewall_configuration   
     ask_certificate_option 
-    configure_sing_box_service
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -2156,17 +2251,13 @@ function NaiveProxy_install() {
 }
 
 function tuic_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option      
-    create_sing_box_folder
-    create_ssl_folder
+    install_sing_box 
+    check_tuic_config
     log_outbound_config    
     generate_tuic_config
     modify_format_inbounds    
     check_firewall_configuration 
     ask_certificate_option
-    configure_sing_box_service
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -2175,17 +2266,13 @@ function tuic_install() {
 }
 
 function Hysteria_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option      
-    create_sing_box_folder
-    create_ssl_folder
+    install_sing_box  
+    check_hysteria_config
     log_outbound_config    
     generate_Hysteria_config
     modify_format_inbounds    
     check_firewall_configuration 
     ask_certificate_option 
-    configure_sing_box_service
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -2194,15 +2281,12 @@ function Hysteria_install() {
 }
 
 function shadowtls_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option      
-    create_sing_box_folder 
+    install_sing_box 
+    check_shadowtls_config
     log_outbound_config 
     generate_shadowtls_config
     modify_format_inbounds    
     check_firewall_configuration      
-    configure_sing_box_service
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -2211,15 +2295,12 @@ function shadowtls_install() {
 }
 
 function reality_install() {
-    configure_dns64
-    enable_bbr
-    select_sing_box_install_option      
-    create_sing_box_folder
+    install_sing_box 
+    check_vless_config
     log_outbound_config         
     generate_reality_config 
     modify_format_inbounds     
-    check_firewall_configuration           
-    configure_sing_box_service    
+    check_firewall_configuration              
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -2228,39 +2309,38 @@ function reality_install() {
 }
 
 function trojan_install() {
-    configure_dns64
-    enable_bbr
-    create_sing_box_folder
-    log_outbound_config      
-    create_caddy_folder    
-    select_sing_box_install_option
-    configure_sing_box_service
+    install_sing_box 
     install_latest_caddy
-    configure_caddy_service    
-    prompt_setup_type
+    configure_caddy_service     
+    create_caddy_folder  
+    check_trojan_config
+    log_outbound_config 
+    prompt_setup_type  
     listen_port
     set_password
-    trojan_multiple_users    
+    trojan_multiple_users     
     web_port
     get_fake_domain
-    get_domain      
-    generate_caddy_config 
-    transport_and_fallback_config=$(prompt_and_generate_transport_config)
+    get_domain 
+    generate_caddy_config
+    transport_and_fallback_config=$(prompt_and_generate_transport_config)                  
     check_firewall_configuration
-    test_caddy_config
+    test_caddy_config       
     generate_trojan_config
     modify_format_inbounds 
-    check_firewall_configuration 
+    check_firewall_configuration
     systemctl daemon-reload
-    systemctl enable caddy
+    systemctl enable caddy        
     systemctl enable sing-box 
     systemctl start caddy
     systemctl start sing-box
+    systemctl restart caddy
     systemctl restart sing-box
     display_trojan_config
 }
 
 function wireguard_install() {
+    check_wireguard_config
     check_config_file_existence
     select_unlocked_items
     geosite=()
