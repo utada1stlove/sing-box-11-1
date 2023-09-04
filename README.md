@@ -1,8 +1,8 @@
 # **说明**
-### 脚本支持IPV6单栈机。
-### 脚本支持 CentOS 8+、Debian 10+、Ubuntu 20+ 操作系统。
-### 脚本支持 warp 解锁 ChatGPT、Netflix、Disney+。
-### 脚本支持多协议共存。
+- **脚本支持IPV6单栈机。**
+- **脚本支持 CentOS 8+、Debian 10+、Ubuntu 20+ 操作系统。**
+- **脚本支持 warp 解锁 ChatGPT、Netflix、Disney+。**
+- **脚本支持多协议共存。**
 
 # **安装**
 - **Debian&&Ubuntu使用以下命令安装依赖**
