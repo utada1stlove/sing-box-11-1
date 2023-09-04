@@ -222,8 +222,9 @@ function enable_bbr() {
 function select_sing_box_install_option() {
     while true; do
         echo "请选择 sing-box 的安装方式（默认1）："
-        echo "1). 下载安装 sing-box（官方稳定版）"
-        echo "2). 编译安装 sing-box（低配置服务器慎用）"
+        echo "1). 下载安装 sing-box（Latest 版本，推荐使用）"
+        echo "2). 下载安装 sing-box（Beta 版本，支持hysteria2）"
+        echo "3). 编译安装 sing-box（低配置服务器慎用）"
 
         local install_option
         read -p "请选择 [1-2]: " install_option
@@ -234,8 +235,12 @@ function select_sing_box_install_option() {
                 install_latest_sing_box
                 break
                 ;;
-        
             2)
+                install_Pre_release_sing_box
+                break
+                ;;                
+        
+            3)
                 install_go
                 compile_install_sing_box
                 break
@@ -349,6 +354,44 @@ function install_latest_sing_box() {
         echo "Sing-Box installed successfully."
     else
         echo -e "${RED}Unable to retrieve the download URL for Sing-Box.${NC}"
+        return 1
+    fi
+}
+
+function install_Pre_release_sing_box() {
+    local arch=$(uname -m)
+    local url="https://api.github.com/repos/SagerNet/sing-box/releases"
+    local download_url
+
+    case $arch in
+        x86_64)
+            download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-amd64.tar.gz")) | .browser_download_url' | head -n 1)
+            ;;
+        armv7l)
+            download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-armv7.tar.gz")) | .browser_download_url' | head -n 1)
+            ;;
+        aarch64)
+            download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-arm64.tar.gz")) | .browser_download_url' | head -n 1)
+            ;;
+        amd64v3)
+            download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-amd64v3.tar.gz")) | .browser_download_url' | head -n 1)
+            ;;
+        *)
+            echo -e "${RED}不支持的架构：$arch${NC}"
+            return 1
+            ;;
+    esac
+
+    if [ -n "$download_url" ]; then
+        echo "Downloading Sing-Box..."
+        wget -qO sing-box.tar.gz "$download_url" 2>&1 >/dev/null
+        tar -xzf sing-box.tar.gz -C /usr/local/bin --strip-components=1
+        rm sing-box.tar.gz
+        chmod +x /usr/local/bin/sing-box
+
+        echo "Sing-Box installed successfully."
+    else
+        echo -e "${RED}Unable to get pre-release download link for Sing-Box.${NC}"
         return 1
     fi
 }
@@ -1319,6 +1362,38 @@ function hysteria_multiple_users() {
     users+=$'\n      ]'
 }
 
+function hy2_multiple_users() {
+    users="[
+        {
+          \"name\": \"$username\",
+          \"password\": \"$password\"
+        }"
+
+    while true; do
+        read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
+
+        if [[ -z "$add_multiple_users" ]]; then
+            add_multiple_users="N"
+        fi
+
+        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            set_username
+            set_password
+            users+=",
+        {
+          \"name\": \"$username\",
+          \"password\": \"$password\"
+        }"
+        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            break
+        else
+            echo -e "${RED}无效的输入，请重新输入。${NC}"
+        fi
+    done
+
+    users+=$'\n      ]'
+}
+
 function add_shadowtls_user() {
     local user_password=""
     if [[ $encryption_choice == 2 || $encryption_choice == 3 ]]; then
@@ -1583,6 +1658,30 @@ function generate_reality_config() {
         /"inbounds": \[/{found=1}
         {print}
         found && /"inbounds": \[/{print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"vless-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": ["; print "        {"; print "          \"uuid\": \"" uuid "\","; print "          \"flow\": \"" flow_type "\""; print "        }"; print "      ], " transport_config; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\","; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"handshake\": {"; print "            \"server\": \"" target_server "\","; print "            \"server_port\": 443"; print "          },"; print "          \"private_key\": \"" private_key "\","; print "          \"short_id\": ["; print "            \"" short_id "\","; print "            " short_ids; print "          ]"; print "        }"; print "      }"; print "    },"; found=0}
+    ' "$config_file" > "$config_file.tmp"
+    mv "$config_file.tmp" "$config_file"
+}
+
+function generate_Hy2_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local certificate=""
+    local private_key="" 
+    listen_port
+    read_up_speed
+    read_down_speed
+    set_username
+    set_password    
+    hy2_multiple_users
+    get_fake_domain
+    get_domain   
+    set_certificate_and_private_key
+    certificate_path="$certificate_path"
+    private_key_path="$private_key_path"
+
+    awk -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v fake_domain="$fake_domain" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
+        /"inbounds": \[/{found=1}
+        {print}
+        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"hy2-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      "; print "      \"ignore_client_bandwidth\": false,"; print "      \"masquerade\": \"https://" fake_domain "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1896,6 +1995,33 @@ function display_Hysteria_config() {
     echo "配置信息已保存至 $output_file"
 }
 
+function display_Hy2_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
+    local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
+    echo -e "${CYAN}Hysteria2 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "服务器地址：$server_name"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "监听端口：$listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "上行速度：${up_mbps}Mbps"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "下行速度：${down_mbps}Mbps"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "ALPN：$alpn"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "用户密码："
+    local user_count=$(echo "$users" | jq length)
+    for ((i = 0; i < user_count; i++)); do
+        local password=$(echo "$users" | jq -r ".[$i].password")
+        echo "用户$i: $password"  | tee -a "$output_file"
+    done
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo "配置信息已保存至 $output_file"
+}
+
 function display_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"
@@ -1989,7 +2115,7 @@ function display_juicity_config() {
     local config_file="/usr/local/etc/juicity/config.json"
     local output_file="/usr/local/etc/juicity/output.txt"  
     local listen_port=$(jq -r '.listen' "$config_file" | sed 's/\://')
-    local UUIDS=$(jq -r '.users | to_entries[] | "UUID:\(.key)\t密码:\(.value)"' "$config_file")
+    local UUIDS=$(jq -r '.users | to_entries[] | "UUID: \(.key)\t密码: \(.value)"' "$config_file")
     local congestion_control=$(jq -r '.congestion_control' "$config_file")
   
     echo -e "${CYAN}juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
@@ -2073,6 +2199,20 @@ function uninstall_juicity() {
     echo "juicity 卸载完成。"
 }
 
+function update_proxy_tool() {
+    if [ -e /usr/local/bin/juicity-server ]; then
+        install_latest_juicity
+    fi
+    
+    if [ -e /usr/bin/caddy ]; then
+        install_latest_caddy
+    fi
+
+    if [ -e /usr/local/bin/sing-box ]; then
+        select_sing_box_install_option
+    fi
+}
+
 function uninstall() {
     local uninstall_sing_box=false
     local uninstall_caddy=false
@@ -2107,7 +2247,7 @@ function uninstall() {
 function check_vless_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "vless-in"" "$config_file"; then
+    if grep -Pzo '"tag": "vless-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}vless 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2116,7 +2256,7 @@ function check_vless_config() {
 function check_tuic_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "tuic-in"" "$config_file"; then
+    if grep -Pzo '"tag": "tuic-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}TUIC 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2125,7 +2265,7 @@ function check_tuic_config() {
 function check_direct_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "direct-in"" "$config_file"; then
+    if grep -Pzo '"tag": "direct-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}Direct 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2134,7 +2274,7 @@ function check_direct_config() {
 function check_trojan_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "trojan-in"" "$config_file"; then
+    if grep -Pzo '"tag": "trojan-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}Trojan 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2143,8 +2283,17 @@ function check_trojan_config() {
 function check_hysteria_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "hysteria-in"" "$config_file"; then
+    if grep -Pzo '"tag": "hysteria-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}Hysteria 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
+        exit 1
+    fi
+}
+
+function check_hy2_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    
+    if grep -Pzo '"tag": "hy2-in"[^}]*' "$config_file" > /dev/null; then
+        echo -e "${RED}Hysteria2 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
 }
@@ -2152,7 +2301,7 @@ function check_hysteria_config() {
 function check_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "st-in"" "$config_file"; then
+    if grep -Pzo '"tag": "st-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}ShadowTLS 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2161,7 +2310,7 @@ function check_shadowtls_config() {
 function check_naive_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "naive-in"" "$config_file"; then
+    if grep -Pzo '"tag": "naive-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}NaiveProxy 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2170,7 +2319,7 @@ function check_naive_config() {
 function check_Shadowsocks_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     
-    if grep -q ""tag": "ss-in"" "$config_file"; then
+    if grep -Pzo '"tag": "ss-in"[^}]*' "$config_file" > /dev/null; then
         echo -e "${RED}Shadowsocks 已安装，请选择其它协议或卸载后重新运行脚本！${NC}"
         exit 1
     fi
@@ -2280,6 +2429,21 @@ function Hysteria_install() {
     display_Hysteria_config
 }
 
+function Hysteria2_install() {
+    install_sing_box  
+    check_hy2_config
+    log_outbound_config    
+    generate_Hy2_config
+    modify_format_inbounds    
+    check_firewall_configuration 
+    ask_certificate_option 
+    systemctl daemon-reload
+    systemctl enable sing-box
+    systemctl start sing-box
+    systemctl restart sing-box
+    display_Hy2_config
+}
+
 function shadowtls_install() {
     install_sing_box 
     check_shadowtls_config
@@ -2309,11 +2473,11 @@ function reality_install() {
 }
 
 function trojan_install() {
-    install_sing_box 
+    install_sing_box
+    check_trojan_config 
     install_latest_caddy
     configure_caddy_service     
-    create_caddy_folder  
-    check_trojan_config
+    create_caddy_folder      
     log_outbound_config 
     prompt_setup_type  
     listen_port
@@ -2366,12 +2530,13 @@ echo -e "║${CYAN} [3]${NC}  Vless                  ${CYAN} [4]${NC}  Direct   
 echo -e "║${CYAN} [5]${NC}  Trojan                 ${CYAN} [6]${NC}  Hysteria                             ║"
 echo -e "║${CYAN} [7]${NC}  ShadowTLS              ${CYAN} [8]${NC}  NaiveProxy                           ║"
 echo -e "║${CYAN} [9]${NC}  Shadowsocks            ${CYAN} [10]${NC} WireGuard                            ║"
-echo -e "║${CYAN} [11]${NC} 查看节点信息           ${CYAN} [12]${NC} 重启服务                             ║"
-echo -e "║${CYAN} [13]${NC} 卸载                   ${CYAN} [0]${NC}  退出                                 ║"
+echo -e "║${CYAN} [11]${NC} Hysteria2              ${CYAN} [12]${NC} 查看节点信息                         ║"
+echo -e "║${CYAN} [13]${NC} 重启服务               ${CYAN} [14]${NC} 更新代理工具                         ║"
+echo -e "║${CYAN} [15]${NC} 卸载                   ${CYAN} [0]${NC}  退出                                 ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
-    read -p "请选择 [0-13]: " choice
+    read -p "请选择 [0-15]: " choice
 
     case $choice in
         1)
@@ -2403,17 +2568,23 @@ echo "╚═══════════════════════�
             ;; 
         10)
             wireguard_install
-            ;;                 
+            ;;  
         11)
+            Hysteria2_install
+            ;;                           
+        12)
             view_saved_config
             ;;
 
-        12)
+        13)
             check_and_restart_services
             ;;
-        13)
+        14)
+            update_proxy_tool
+            ;;             
+        15)
             uninstall
-            ;;       
+            ;;                   
         0)
             echo "感谢使用 Mr. xiao 安装脚本！再见！"
             exit 0
