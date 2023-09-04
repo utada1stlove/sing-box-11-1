@@ -24,12 +24,6 @@ bash <(curl -L https://raw.githubusercontent.com/TinrLin/script_installation/mai
 ## 安装iptables-persistent
 apt install iptables-persistent
 
-## 启用iptables服务
-systemctl enable iptables
-
-## 启动iptables服务
-systemctl start iptables
-
 ## 清空默认规则
 iptables -F
 
