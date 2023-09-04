@@ -20,78 +20,57 @@ bash <(curl -L https://raw.githubusercontent.com/TinrLin/script_installation/mai
 # **Hysteria端口跳跃**
 ```
 # Debian&&Ubuntu
-- **安装iptables-persistent**
-```
+
+## 安装iptables-persistent
 apt install iptables-persistent
-```
-- **Allow all inbound**
-```
+
+## 允许所有入站
 iptables -P INPUT ACCEPT
-```
-- **Clear all default rules**
-```
+
+## 清空所有默认规则
 iptables -F
-```
-- **Clear all custom rules**
-```
+
+## 清空所有自定义规则
 iptables -X
-```
-- **All counters are cleared**
-```
+
+## 所有计数器清零
 iptables -Z
-```
-- **Allow local access**
-```
+
+## 允许本地访问
 iptables -A INPUT -i lo -j ACCEPT
-```
-- **Open ssh port,replace 22 with your ssh port**
-```
+
+## 开放22端口,22替换为你的ssh连接端口
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-```
-- **Open port 80 (HTTP)**
-```
+
+## 开放80端口(HTTP)，申请证书时使用，要放行其它端口请将80替换为你要放行的端口
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-```
-- **Open port 443 (HTTPS)**
-```
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-```
-- **Open port 10010 (UDP),replace 10010 with your listening port**
-```
+
+## 开放10010端口(UDP)，10010替换为节点的监听端口
 iptables -A INPUT -p udp --dport 10010 -j ACCEPT
-```
-- **Open port 20000-40000 (UDP),20000-40000 can be set by yourself**
-```
+
+## 开放20000-40000端口(UDP)，20000-40000可以自己设置
 iptables -A INPUT -p udp --dport 20000:40000 -j ACCEPT
-```
-- **Allows to accept return data after native request**
-```
+
+## 允许接受本机请求之后的返回数据
 iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
-```
-- **All other entries are prohibited**
-```
+
+## 其他入站一律禁止
 iptables -P INPUT DROP
-```
-- **Allow all outbound**
-```
+
+## 允许所有出站
 iptables -P OUTPUT ACCEPT
-```
-- **Check open ports**
-```
+
+## 查看开放的端口
 iptables -L
-```
-- **Add NAT rule**
-```
+
+## 添加NAT规则，20000:40000替换为你设置端口跳跃的范围，10010替换为你节点的监听端口
 iptables -t nat -A PREROUTING -p udp --dport 20000:40000 -j DNAT --to-destination :10010
-```
-- **View NAT rules**
-```
+
+## 查看NAT规则
 iptables -t nat -nL --line
-```
-- **Save iptables rules**
-```
+
+## 保存iptables规则
 netfilter-persistent save
-```
 ```
 # **脚本支持的节点类型**
 - **TUIC V5**
