@@ -20,6 +20,7 @@ bash <(curl -L https://raw.githubusercontent.com/TinrLin/script_installation/mai
 - **TUIC V5**
 - **juicity**
 - **WireGuard**
+- **Hysteria2**
 - **Vless+vision+Reality**
 - **Vless+h2+Reality**
 - **Vless+gRPC+Reality**
