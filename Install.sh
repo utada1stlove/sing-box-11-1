@@ -978,11 +978,6 @@ function get_domain() {
 
         resolved_ipv4=$(dig +short A "$domain" 2>/dev/null)
         resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
-        echo "输入的域名：$domain"
-        echo "本地IPv4地址：$local_ip_v4"
-        echo "本地IPv6地址：$local_ip_v6"
-        echo "解析的IPv4地址：$resolved_ipv4"
-        echo "解析的IPv6地址：$resolved_ipv6"
 
         if [[ -z $domain ]]; then
             echo -e "${RED}错误：域名不能为空，请重新输入。${NC}"
@@ -1045,22 +1040,32 @@ function set_certificate_and_private_key() {
         read -p "请输入证书路径 (默认/etc/ssl/private/cert.crt): " certificate_path
         certificate_path=${certificate_path:-"/etc/ssl/private/cert.crt"}
 
-        if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" && (! -f "$certificate_path" || ${certificate_path: -4} != ".crt") ]]; then
-            echo -e "${RED}错误：证书文件不存在，请重新输入。${NC}"
-        else
-            break
+        certificate_file=$(basename "$certificate_path")
+        allowed_extensions=("crt" "pem" "cer" "der")
+
+        if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" ]]; then
+            if ! ( -f "$certificate_path" && [[ "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]] ); then
+                echo -e "${RED}错误：证书文件不存在或扩展名不正确，请重新输入。${NC}"
+                continue
+            fi
         fi
+        break
     done
 
     while true; do
         read -p "请输入私钥路径 (默认/etc/ssl/private/private.key): " private_key_path
         private_key_path=${private_key_path:-"/etc/ssl/private/private.key"}
 
-        if [[ "$private_key_path" != "/etc/ssl/private/private.key" && (! -f "$private_key_path" || ${private_key_path: -4} != ".key") ]]; then
-            echo -e "${RED}错误：私钥文件不存在，请重新输入。${NC}"
-        else
-            break
+        private_key_file=$(basename "$private_key_path")
+        allowed_extensions=("key" "pem" "pkcs8" "p12" "pfx")
+
+        if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
+            if ! ( -f "$private_key_path" && [[ "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]] ); then
+                echo -e "${RED}错误：私钥文件不存在或扩展名不正确，请重新输入。${NC}"
+                continue
+            fi
         fi
+        break
     done
 }
 
