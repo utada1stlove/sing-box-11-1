@@ -1045,7 +1045,7 @@ function set_certificate_and_private_key() {
 
         if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" ]]; then
             if ! ( -f "$certificate_path" && [[ "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]] ); then
-                echo -e "${RED}错误：证书文件不存在或扩展名不正确，请重新输入。${NC}"
+                echo -e "${RED}错误：证书文件不存在，请重新输入！${NC}"
                 continue
             fi
         fi
@@ -1061,7 +1061,7 @@ function set_certificate_and_private_key() {
 
         if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
             if ! ( -f "$private_key_path" && [[ "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]] ); then
-                echo -e "${RED}错误：私钥文件不存在或扩展名不正确，请重新输入。${NC}"
+                echo -e "${RED}错误：私钥文件不存在，请重新输入！${NC}"
                 continue
             fi
         fi
