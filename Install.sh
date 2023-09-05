@@ -1041,7 +1041,7 @@ function set_certificate_and_private_key() {
         certificate_path=${certificate_path:-"/etc/ssl/private/cert.crt"}
 
         certificate_file=$(basename "$certificate_path")
-        allowed_extensions=("crt" "pem" "cer" "der")
+        allowed_extensions=("crt" "pem")
 
         if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" ]]; then
             if [[ ! -f "$certificate_path" || ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
@@ -1057,7 +1057,7 @@ function set_certificate_and_private_key() {
         private_key_path=${private_key_path:-"/etc/ssl/private/private.key"}
 
         private_key_file=$(basename "$private_key_path")
-        allowed_extensions=("key" "pem" "pkcs8" "p12" "pfx")
+        allowed_extensions=("key" "pem")
 
         if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
             if [[ ! -f "$private_key_path" || ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
