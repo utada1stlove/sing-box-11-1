@@ -1044,8 +1044,8 @@ function set_certificate_and_private_key() {
         allowed_extensions=("crt" "pem" "cer" "der")
 
         if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" ]]; then
-            if ! ( -f "$certificate_path" && [[ "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]] ); then
-                echo -e "${RED}错误：证书文件不存在，请重新输入！${NC}"
+            if [[ ! -f "$certificate_path" || ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
+                echo -e "${RED}错误：证书文件不存在，请重新输入!${NC}"
                 continue
             fi
         fi
@@ -1060,8 +1060,8 @@ function set_certificate_and_private_key() {
         allowed_extensions=("key" "pem" "pkcs8" "p12" "pfx")
 
         if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
-            if ! ( -f "$private_key_path" && [[ "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]] ); then
-                echo -e "${RED}错误：私钥文件不存在，请重新输入！${NC}"
+            if [[ ! -f "$private_key_path" || ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
+                echo -e "${RED}错误：私钥文件不存在，请重新输入!${NC}"
                 continue
             fi
         fi
