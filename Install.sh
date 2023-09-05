@@ -990,18 +990,24 @@ function get_domain() {
             if [[ ("$resolved_ipv4" == "$local_ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$local_ip_v6" && ! -z "$resolved_ipv6") ]]; then
                 break
             else
-                resolved_ip=$(ping "$domain" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
-                echo "解析的IP地址（ping）：$resolved_ip"
-                if [[ ("$resolved_ipv4" == "$local_ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$local_ip_v6" && ! -z "$resolved_ipv6") ]]; then
-                    break
-                else
-                    echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
+                if [[ -z "$resolved_ipv4" && -n "$local_ip_v4" ]]; then
+                    resolved_ip_v4=$(ping -4 "$domain" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
+                    if [[ ("$resolved_ip_v4" == "$local_ip_v4" && ! -z "$resolved_ip_v4") ]]; then
+                        break
+                    fi
                 fi
+                if [[ -z "$resolved_ipv6" && -n "$local_ip_v6" ]]; then
+                    resolved_ip_v6=$(ping -6 "$domain" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
+                    if [[ ("$resolved_ip_v6" == "$local_ip_v6" && ! -z "$resolved_ip_v6") ]]; then
+                        break
+                    fi
+                fi
+                echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
             fi
         fi
     done
 }
-
+   
 function get_fake_domain() {
     while true; do
         read -p "请输入伪装网址（默认: www.fan-2000.com）: " fake_domain
