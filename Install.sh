@@ -868,6 +868,22 @@ function generate_target_server() {
     done
 }
 
+function get_local_ip() {
+    local local_ip_v4
+    local local_ip_v6
+
+    local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
+    local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
+
+    if [[ -n "$local_ip_v4" ]]; then
+        echo "$local_ip_v4"
+    elif [[ -n "$local_ip_v6" ]]; then
+        echo "$local_ip_v6"
+    else
+        echo "无法获取本机IP地址"
+    fi
+}
+
 function get_domain() {
     while true; do
         read -p "请输入域名： " domain
@@ -1871,7 +1887,7 @@ function display_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"   
     local local_ip
-    local_ip=$(hostname -I | awk '{print $1}')       
+    local_ip=$(get_local_ip)       
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
     local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
@@ -2028,7 +2044,7 @@ function display_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"
     local local_ip
-    local_ip=$(hostname -I | awk '{print $1}')    
+    local_ip=$(get_local_ip)    
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
     local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "ShadowTLS 密码: \(.password)"' "$config_file")
     local user_input=$(jq -r '.inbounds[0].handshake.server' "$config_file")
@@ -2053,7 +2069,7 @@ function display_Direct_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"    
     local local_ip
-    local_ip=$(hostname -I | awk '{print $1}')
+    local_ip=$(get_local_ip)
     local override_address=$(jq -r '.inbounds[0].override_address' "$config_file")
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local override_port=$(jq -r '.inbounds[0].override_port' "$config_file")
@@ -2075,7 +2091,7 @@ function display_Shadowsocks_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt" 
     local local_ip
-    local_ip=$(hostname -I | awk '{print $1}')
+    local_ip=$(get_local_ip)
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
     local ss_password=$(jq -r '.inbounds[0].password' "$config_file")
