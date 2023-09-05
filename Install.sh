@@ -872,8 +872,8 @@ function get_domain() {
     while true; do
         read -p "请输入域名： " domain
 
-        local_ip_v4=$(hostname -I | awk '{print $1}')
-        local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
+        local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
+        local_ip_v6=$(curl -6 -s https://ifconfig.co/ip || curl -6 -s https://api.myip.com | jq -r '.ip' || ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
 
         resolved_ipv4=$(dig +short A "$domain" 2>/dev/null)
         resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
