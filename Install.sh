@@ -1037,19 +1037,21 @@ function test_caddy_config() {
 
 function set_certificate_and_private_key() {
     while true; do
-        read -p "请输入证书路径 (默认/etc/ssl/private/cert.crt): " certificate_path
+        read -p "请输入 PEM 证书路径 (默认/etc/ssl/private/cert.crt): " certificate_path
         certificate_path=${certificate_path:-"/etc/ssl/private/cert.crt"}
 
         certificate_file=$(basename "$certificate_path")
         allowed_extensions=("crt" "pem")
 
         if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" ]]; then
-            if [[ ! -f "$certificate_path" || ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
+            if [[ ! -f "$certificate_path" ]]; then
                 echo -e "${RED}错误：证书文件不存在，请重新输入!${NC}"
-                continue
+            elif [[ ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
+                echo -e "${RED}错误：不支持的证书格式，请配置.crt或.pem格式的证书文件!${NC}"
+            else
+                break
             fi
         fi
-        break
     done
 
     while true; do
@@ -1060,12 +1062,14 @@ function set_certificate_and_private_key() {
         allowed_extensions=("key" "pem")
 
         if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
-            if [[ ! -f "$private_key_path" || ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
+            if [[ ! -f "$private_key_path" ]]; then
                 echo -e "${RED}错误：私钥文件不存在，请重新输入!${NC}"
-                continue
+            elif [[ ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
+                echo -e "${RED}错误：不支持的私钥格式，请配置.key或.pem格式的私钥文件!${NC}"
+            else
+                break
             fi
         fi
-        break
     done
 }
 
