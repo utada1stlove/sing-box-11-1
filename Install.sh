@@ -38,6 +38,8 @@ function check_firewall_configuration() {
             firewall="iptables"
         elif systemctl is-active --quiet netfilter-persistent; then
             firewall="iptables-persistent"
+        elif systemctl is-active --quiet iptables.service; then
+            firewall="iptables-service"            
         elif command -v firewalld >/dev/null 2>&1 && firewall-cmd --state | grep -q "running"; then
             firewall="firewalld"
         fi
@@ -73,7 +75,7 @@ function check_firewall_configuration() {
 
             echo "Firewall configuration has been updated."
             ;;
-        iptables | iptables-persistent)
+        iptables | iptables-persistent | iptables-service)
             # IPv4 rules
             if ! iptables -C INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
                 iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT > /dev/null 2>&1
@@ -140,8 +142,17 @@ function check_firewall_configuration() {
                 ip6tables -A INPUT -p udp --dport 80 -j ACCEPT > /dev/null 2>&1
             fi
 
-            iptables-save > /etc/iptables/rules.v4
-            ip6tables-save > /etc/iptables/rules.v6
+            if [[ -e /etc/iptables/rules.v4 ]]; then
+                iptables-save > /etc/iptables/rules.v4
+            elif [[ -e /etc/sysconfig/iptables ]]; then
+                iptables-save > /etc/sysconfig/iptables
+            fi
+
+            if [[ -e /etc/iptables/rules.v6 ]]; then
+                ip6tables-save > /etc/iptables/rules.v6
+            elif [[ -e /etc/sysconfig/ip6tables ]]; then
+                ip6tables-save > /etc/sysconfig/ip6tables
+            fi
 
             echo "Firewall configuration has been updated."
             ;;
