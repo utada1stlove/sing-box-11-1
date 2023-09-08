@@ -1,0 +1,20 @@
+{
+  "server": "domain.com:10010,20000-40000",   //域名：端口，端口范围
+  "auth": "a0f8u6zsavqq",    //密码
+  "bandwidth": {
+    "up": "50 mbps",
+    "down": "100 mbps"
+  },
+  "transport": {
+    "type": "udp",
+	"hopInterval": "30s"
+  },
+  "fastOpen": true,
+  "lazy": true,
+  "socks5": {
+    "listen": "127.0.0.1:1080"
+  },
+  "http": {
+    "listen": "127.0.0.1:8080"
+  }
+}
