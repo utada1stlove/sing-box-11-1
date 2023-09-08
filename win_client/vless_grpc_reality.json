@@ -1,0 +1,40 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 1080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-out",
+      "server": "00.00.00.00",   //IP地址
+      "server_port": 1080,    //监听端口
+      "uuid": "bf000d23-0752-40b4-affe-68f7707a9661",   //UUID
+      "flow": "",
+      "transport": {
+        "type": "grpc"
+      },	  
+      "tls": {
+        "enabled": true,
+        "server_name": "mydomain.com",   //目标网址   
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0",   //PublicKey
+          "short_id": "0123456789abcdef"    //Short ID
+        }
+      }
+    }
+  ]
+}

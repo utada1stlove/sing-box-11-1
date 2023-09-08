@@ -1,0 +1,30 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },	
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "::",
+      "listen_port": 1080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "hysteria",
+      "tag": "hysteria-out",
+      "server": "domain.com",   //域名
+      "server_port": 10021,    //监听端口
+      "up_mbps": 50,    //上行速率
+      "down_mbps": 100,    //下行速率
+      "auth_str": "n6frgihywarj",    //认证密码
+      "tls": {
+        "enabled": true,
+        "server_name": "domain.com",    //域名
+        "alpn": ["h3"]
+      }
+    }
+  ]  
+}
