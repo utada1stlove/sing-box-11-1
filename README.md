@@ -128,7 +128,7 @@ service iptables save
 - **Vless+vision+Reality**
 - **Vless+h2+Reality**
 - **Vless+gRPC+Reality**
-- **Direct tunnel server**
+- **Direct--sing-box版任意门**
 - **Trojan+tcp+tls+web**
 - **Trojan+ws+tls+(CDN)**
 - **Hysteria**
