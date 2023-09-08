@@ -1067,7 +1067,7 @@ function set_certificate_and_private_key() {
     done
 
     while true; do
-        read -p "请输入私钥路径 (默认/etc/ssl/private/private.key): " private_key_path
+        read -p "请输入 PEM 私钥路径 (默认/etc/ssl/private/private.key): " private_key_path
         private_key_path=${private_key_path:-"/etc/ssl/private/private.key"}
 
         if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
@@ -1625,24 +1625,33 @@ function extract_variables_and_cleanup() {
 function log_outbound_config() {
   local config_file="/usr/local/etc/sing-box/config.json"
 
-  if ! grep -q '"log": {' "$config_file" || ! grep -q '"inbounds": \[' "$config_file" || ! grep -q '"outbounds": \[' "$config_file"; then
-    echo -e '{\n  "log": {\n  },\n  "inbounds": [\n  ],\n  "outbounds": [\n  ]\n}' > "$config_file"
+  if ! grep -q '"log": {' "$config_file" || ! grep -q '"route": {' "$config_file"  || ! grep -q '"inbounds": \[' "$config_file" || ! grep -q '"outbounds": \[' "$config_file"; then
+    echo -e '{\n  "log": {\n  },\n  "route": {\n  },\n  "inbounds": [\n  ],\n  "outbounds": [\n  ]\n}' > "$config_file"
     sed -i '/"log": {/!b;n;c\    "disabled": false,\n    "level": "info",\n    "timestamp": true\n  },' "$config_file"
+    sed -i '/"route": {/!b;n;c\    "rules": [\n    ]\n  },' "$config_file"
     sed -i '/"outbounds": \[/!b;n;c\    {\n      "type": "direct",\n      "tag": "direct"\n    }\n  ]' "$config_file"
   fi
 }
 
-function modify_format_inbounds() {
+function modify_format_inbounds_and_outbounds() {
     file_path="/usr/local/etc/sing-box/config.json"
-    start_line=$(grep -n '"outbounds": \[' "$file_path" | cut -d: -f1)
+    start_line_inbounds=$(grep -n '"inbounds": \[' "$file_path" | cut -d: -f1)
+    start_line_outbounds=$(grep -n '"outbounds": \[' "$file_path" | cut -d: -f1)
 
-    if [ -n "$start_line" ]; then
-        line_to_modify_1=$((start_line - 2))
-        line_to_modify_2=$((start_line - 1))
+    if [ -n "$start_line_inbounds" ]; then
+        line_to_modify_inbounds=$((start_line_inbounds - 3))
+        if [ "$line_to_modify_inbounds" -ge 1 ]; then
+            sed -i "$line_to_modify_inbounds s/,//" "$file_path"
+        fi
+    fi
 
-        if [ "$line_to_modify_1" -ge 1 ]; then
-            sed -i "$line_to_modify_1 s/.*/    }/" "$file_path"
-            sed -i "$line_to_modify_2 s/.*/  ],/" "$file_path"
+    if [ -n "$start_line_outbounds" ]; then
+        line_to_modify_outbounds_1=$((start_line_outbounds - 2))
+        line_to_modify_outbounds_2=$((start_line_outbounds - 1))
+
+        if [ "$line_to_modify_outbounds_1" -ge 1 ]; then
+            sed -i "$line_to_modify_outbounds_1 s/.*/    }/" "$file_path"
+            sed -i "$line_to_modify_outbounds_2 s/.*/  ],/" "$file_path"
         fi
     fi
 }
@@ -1651,10 +1660,14 @@ function generate_Direct_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag
+    local found_rules=0
+    local found_inbounds=0
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v target_address="$target_address" -v override_port="$override_port" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"sniff_timeout\": \"300ms\","; print "      \"proxy_protocol\": false,"; print "      \"network\": \"tcp\","; print "      \"override_address\": \"" target_address "\","; print "      \"override_port\": " override_port; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"sniff_timeout\": \"300ms\","; print "      \"proxy_protocol\": false,"; print "      \"network\": \"tcp\","; print "      \"override_address\": \"" target_address "\","; print "      \"override_port\": " override_port; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1662,11 +1675,15 @@ function generate_Direct_config() {
 function generate_ss_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
-    generate_unique_tag      
+    generate_unique_tag
+    local found_rules=0
+    local found_inbounds=0
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"method\": \"" ss_method "\","; print "      \"password\": \"" ss_password "\""; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"method\": \"" ss_method "\","; print "      \"password\": \"" ss_password "\""; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1685,11 +1702,14 @@ function generate_naive_config() {
     set_certificate_and_private_key
     certificate_path="$certificate_path"
     private_key_path="$private_key_path"
-
+    local found_rules=0
+    local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"naive\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"naive\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1710,11 +1730,14 @@ function generate_tuic_config() {
     set_certificate_and_private_key
     certificate_path="$certificate_path"
     private_key_path="$private_key_path"
-
+    local found_rules=0
+    local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v congestion_control="$congestion_control" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"congestion_control\": \"" congestion_control "\","; print "      \"auth_timeout\": \"3s\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"congestion_control\": \"" congestion_control "\","; print "      \"auth_timeout\": \"3s\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1735,11 +1758,14 @@ function generate_Hysteria_config() {
     set_certificate_and_private_key
     certificate_path="$certificate_path"
     private_key_path="$private_key_path"
-
+    local found_rules=0
+    local found_inbounds=0   
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1757,11 +1783,14 @@ function generate_shadowtls_config() {
     add_shadowtls_user
     add_multiple_shadowtls_users
     generate_target_server
-
+    local found_rules=0
+    local found_inbounds=0
     awk -v tag_label1="$tag_label1" -v tag_label2="$tag_label2" -v listen_port="$listen_port" -v users="$users" -v target_server="$target_server" -v ss_method="$ss_method" -v ss_password="$ss_password" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" tag_label1 "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"version\": 3,"; print "      \"users\": [" users ""; print "      ],"; print "      \"handshake\": {"; print "        \"server\": \"" target_server "\","; print "        \"server_port\": 443"; print "      },"; print "      \"strict_mode\": true,"; print "      \"detour\": \"" tag_label2 "\""; print "    },"; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" tag_label2 "\","; print "      \"listen\": \"127.0.0.1\","; print "      \"network\": \"tcp\","; print "      \"method\": \"" ss_method "\","; print "      \"password\": \"" ss_password "\""; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label1 "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" tag_label1 "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"version\": 3,"; print "      \"users\": [" users ""; print "      ],"; print "      \"handshake\": {"; print "        \"server\": \"" target_server "\","; print "        \"server_port\": 443"; print "      },"; print "      \"strict_mode\": true,"; print "      \"detour\": \"" tag_label2 "\""; print "    },"; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" tag_label2 "\","; print "      \"listen\": \"127.0.0.1\","; print "      \"network\": \"tcp\","; print "      \"method\": \"" ss_method "\","; print "      \"password\": \"" ss_password "\""; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1806,11 +1835,14 @@ function generate_reality_config() {
     generate_private_key
     set_short_id
     configure_short_ids
-
+    local found_rules=0
+    local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v transport_config="$transport_config" -v server_name="$server_name" -v target_server="$target_server" -v private_key="$private_key" -v short_id="$short_id" -v short_ids="$short_ids" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": ["; print "        {"; print "          \"uuid\": \"" uuid "\","; print "          \"flow\": \"" flow_type "\""; print "        }"; print "      ], " transport_config; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\","; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"handshake\": {"; print "            \"server\": \"" target_server "\","; print "            \"server_port\": 443"; print "          },"; print "          \"private_key\": \"" private_key "\","; print "          \"short_id\": ["; print "            \"" short_id "\","; print "            " short_ids; print "          ]"; print "        }"; print "      }"; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": ["; print "        {"; print "          \"uuid\": \"" uuid "\","; print "          \"flow\": \"" flow_type "\""; print "        }"; print "      ], " transport_config; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\","; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"handshake\": {"; print "            \"server\": \"" target_server "\","; print "            \"server_port\": 443"; print "          },"; print "          \"private_key\": \"" private_key "\","; print "          \"short_id\": ["; print "            \"" short_id "\","; print "            " short_ids; print "          ]"; print "        }"; print "      }"; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1832,11 +1864,14 @@ function generate_Hy2_config() {
     set_certificate_and_private_key
     certificate_path="$certificate_path"
     private_key_path="$private_key_path"
-
+    local found_rules=0
+    local found_inbounds=0      
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v fake_domain="$fake_domain" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      "; print "      \"ignore_client_bandwidth\": false,"; print "      \"masquerade\": \"https://" fake_domain "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      "; print "      \"ignore_client_bandwidth\": false,"; print "      \"masquerade\": \"https://" fake_domain "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1845,11 +1880,14 @@ function generate_trojan_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag
-        
+    local found_rules=0
+    local found_inbounds=0              
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" -v transport_and_fallback_config="$transport_and_fallback_config" '
-        /"inbounds": \[/{found=1}
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
         {print}
-        found && /"inbounds": \[/{print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ],"; print "        \"certificate_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" domain "/" domain ".crt\","; print "        \"key_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" domain "/" domain ".key\""; print "      }" transport_and_fallback_config; print "    },"; found=0}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ],"; print "        \"certificate_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" domain "/" domain ".crt\","; print "        \"key_path\": \"/etc/ssl/certificates/acme-v02.api.letsencrypt.org-directory/" domain "/" domain ".key\""; print "      }" transport_and_fallback_config; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 } 
@@ -1957,17 +1995,13 @@ function update_route_file() {
     local geosite_list=$(IFS=,; echo "${geosite[*]}") 
     local geosite_formatted=$(sed 's/,/,\\n          /g' <<< "$geosite_list") 
 
-    sed -i '/"log": {/!b;n;/"/!b;n;/"/!b;n;/"/!b;n;a\
-  "route": {\
-    "rules": [\
+    sed -i '/"rules": \[/!b;a\
       {\
         "geosite": [\
           '"$geosite_formatted"'\
         ],\
-        "outbound": "'$1'"\
-      }\
-    ]\
-  },' "$config_file"  
+        "outbound": "'"$1"'"\
+      },' "$config_file"
 }
 
 function update_outbound_file() {
@@ -2432,7 +2466,7 @@ function Direct_install() {
     override_address
     override_port
     generate_Direct_config
-    modify_format_inbounds
+    modify_format_inbounds_and_outbounds
     check_firewall_configuration 
     systemctl daemon-reload   
     systemctl enable sing-box
@@ -2447,7 +2481,7 @@ function Shadowsocks_install() {
     listen_port
     encryption_method
     generate_ss_config
-    modify_format_inbounds
+    modify_format_inbounds_and_outbounds
     check_firewall_configuration 
     systemctl daemon-reload   
     systemctl enable sing-box   
@@ -2460,7 +2494,7 @@ function NaiveProxy_install() {
     install_sing_box 
     log_outbound_config        
     generate_naive_config
-    modify_format_inbounds    
+    modify_format_inbounds_and_outbounds    
     check_firewall_configuration   
     ask_certificate_option 
     systemctl daemon-reload
@@ -2474,7 +2508,7 @@ function tuic_install() {
     install_sing_box 
     log_outbound_config    
     generate_tuic_config
-    modify_format_inbounds    
+    modify_format_inbounds_and_outbounds    
     check_firewall_configuration 
     ask_certificate_option
     systemctl daemon-reload
@@ -2488,7 +2522,7 @@ function Hysteria_install() {
     install_sing_box  
     log_outbound_config    
     generate_Hysteria_config
-    modify_format_inbounds    
+    modify_format_inbounds_and_outbounds    
     check_firewall_configuration 
     ask_certificate_option 
     systemctl daemon-reload
@@ -2502,7 +2536,7 @@ function Hysteria2_install() {
     install_sing_box  
     log_outbound_config    
     generate_Hy2_config
-    modify_format_inbounds    
+    modify_format_inbounds_and_outbounds    
     check_firewall_configuration 
     ask_certificate_option 
     systemctl daemon-reload
@@ -2516,7 +2550,7 @@ function shadowtls_install() {
     install_sing_box 
     log_outbound_config 
     generate_shadowtls_config
-    modify_format_inbounds    
+    modify_format_inbounds_and_outbounds    
     check_firewall_configuration      
     systemctl daemon-reload
     systemctl enable sing-box
@@ -2529,7 +2563,7 @@ function reality_install() {
     install_sing_box 
     log_outbound_config         
     generate_reality_config 
-    modify_format_inbounds     
+    modify_format_inbounds_and_outbounds     
     check_firewall_configuration              
     systemctl daemon-reload
     systemctl enable sing-box
@@ -2556,7 +2590,7 @@ function trojan_install() {
     check_firewall_configuration
     test_caddy_config       
     generate_trojan_config
-    modify_format_inbounds 
+    modify_format_inbounds_and_outbounds 
     check_firewall_configuration
     systemctl daemon-reload
     systemctl enable caddy        
