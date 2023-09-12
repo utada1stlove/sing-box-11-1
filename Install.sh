@@ -3,7 +3,7 @@
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 function configure_dns64() {
     local ipv4_address
@@ -708,7 +708,7 @@ function set_password() {
     read -p "请输入密码（默认随机生成）: " password
 
     if [[ -z "$password" ]]; then
-        password=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 12 | head -n 1)
+        password=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)
         echo "随机生成的密码：$password"
     else
         echo "密码：$password"
@@ -1133,18 +1133,23 @@ function generate_private_key() {
 
 function encryption_method() {
     while true; do
-        read -p "请选择加密方式(默认3)：
-1). 2022-blake3-aes-128-gcm
+        read -p "请选择加密方式(默认1)：
+1). 2022-blake3-chacha20-poly1305
 2). 2022-blake3-aes-256-gcm
-3). 2022-blake3-chacha20-poly1305
-请选择[1-3]: " encryption_choice
-        encryption_choice=${encryption_choice:-3}
+3). 2022-blake3-aes-128-gcm
+4). xchacha20-ietf-poly1305
+5). chacha20-ietf-poly1305
+6). aes-256-gcm
+7). aes-192-gcm
+8). aes-128-gcm
+请选择[1-8]: " encryption_choice
+        encryption_choice=${encryption_choice:-1}
 
         case $encryption_choice in
             1)
-                ss_method="2022-blake3-aes-128-gcm"
-                ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                ss_method="2022-blake3-chacha20-poly1305"
+                ss_password=$(sing-box generate rand --base64 32)
+                shadowtls_password=$(openssl rand -base64 32)
                 break
                 ;;
             2)
@@ -1152,13 +1157,44 @@ function encryption_method() {
                 ss_password=$(sing-box generate rand --base64 32)
                 shadowtls_password=$(openssl rand -base64 32)
                 break
-                ;;
+                ;;                
             3)
-                ss_method="2022-blake3-chacha20-poly1305"
-                ss_password=$(sing-box generate rand --base64 32)
-                shadowtls_password=$(openssl rand -base64 32)
+                ss_method="2022-blake3-aes-128-gcm"
+                ss_password=$(sing-box generate rand --base64 16)
+                shadowtls_password=$(openssl rand -base64 16)
                 break
                 ;;
+
+            4)
+                ss_method="xchacha20-ietf-poly1305"
+                ss_password=$(sing-box generate rand --base64 16)
+                shadowtls_password=$(openssl rand -base64 16)
+                break
+                ;;
+            5)
+                ss_method="chacha20-ietf-poly1305"
+                ss_password=$(sing-box generate rand --base64 16)
+                shadowtls_password=$(openssl rand -base64 16)
+                break
+                ;;
+            6)
+                ss_method="aes-256-gcm"
+                ss_password=$(sing-box generate rand --base64 16)
+                shadowtls_password=$(openssl rand -base64 16)
+                break
+                ;;
+            7)
+                ss_method="aes-192-gcm"
+                ss_password=$(sing-box generate rand --base64 16)
+                shadowtls_password=$(openssl rand -base64 16)
+                break
+                ;;
+            8)
+                ss_method="aes-128-gcm"
+                ss_password=$(sing-box generate rand --base64 16)
+                shadowtls_password=$(openssl rand -base64 16)
+                break
+                ;;                                                                
             *)
                 echo -e "${RED}错误：无效的选择，请重新输入。${NC}"
                 ;;
@@ -1533,9 +1569,9 @@ function hy2_multiple_users() {
 
 function add_shadowtls_user() {
     local user_password=""
-    if [[ $encryption_choice == 2 || $encryption_choice == 3 ]]; then
+    if [[ $encryption_choice == 1 || $encryption_choice == 2 ]]; then
         user_password=$(openssl rand -base64 32)
-    elif [[ $encryption_choice == 1 ]]; then
+    elif [[ $encryption_choice == 3 || $encryption_choice == 4 || $encryption_choice == 5 || $encryption_choice == 6 || $encryption_choice == 7 || $encryption_choice == 8 ]]; then
         user_password=$(openssl rand -base64 16)
     fi
 
@@ -1895,99 +1931,8 @@ function generate_trojan_config() {
 function generate_caddy_config() {
     local caddy_config="/usr/local/etc/caddy/caddy.json"
     awk -v fallback_port="$fallback_port" -v fake_domain="$fake_domain" -v domain="$domain" '
-        BEGIN {
-            print "{"
-            print "  \"logging\": {"
-            print "    \"logs\": {"
-            print "      \"default\": {"
-            print "        \"writer\": {"
-            print "          \"output\": \"file\","
-            print "          \"filename\": \"/var/log/caddy.log\""
-            print "        },"
-            print "        \"level\": \"WARN\""
-            print "      }"
-            print "    }"
-            print "  },"
-            print "  \"storage\": {"
-            print "    \"module\": \"file_system\","
-            print "    \"root\": \"/etc/ssl\""
-            print "  },"
-            print "  \"apps\": {"
-            print "    \"http\": {"
-            print "      \"servers\": {"
-            print "        \"h1\": {"
-            print "          \"listen\": [\":80\"],"
-            print "          \"routes\": ["
-            print "            {"
-            print "              \"handle\": ["
-            print "                {"
-            print "                  \"handler\": \"static_response\","
-            print "                  \"headers\": {"
-            print "                    \"Location\": [\"https://{http.request.host}{http.request.uri}\"]"
-            print "                  },"
-            print "                  \"status_code\": 301"
-            print "                }"
-            print "              ]"
-            print "            }"
-            print "          ],"
-            print "          \"protocols\": [\"h1\"]"
-            print "        },"
-            print "        \"h1h2c\": {"
-            print "          \"listen\": [\"127.0.0.1:" fallback_port "\"],"
-            print "          \"routes\": ["
-            print "            {"
-            print "              \"handle\": ["
-            print "                {"
-            print "                  \"handler\": \"headers\","
-            print "                  \"response\": {"
-            print "                    \"set\": {"
-            print "                      \"Strict-Transport-Security\": [\"max-age=31536000; includeSubDomains; preload\"]"
-            print "                    }"
-            print "                  }"
-            print "                },"
-            print "                {"
-            print "                  \"handler\": \"reverse_proxy\","
-            print "                  \"headers\": {"
-            print "                    \"request\": {"
-            print "                      \"set\": {"
-            print "                        \"Host\": [\"{http.reverse_proxy.upstream.hostport}\"],"
-            print "                        \"X-Forwarded-Host\": [\"{http.request.host}\"]"
-            print "                      }"
-            print "                    }"
-            print "                  },"
-            print "                  \"transport\": {"
-            print "                    \"protocol\": \"http\","
-            print "                    \"tls\": {}"
-            print "                  },"
-            print "                  \"upstreams\": [{\"dial\": \"" fake_domain ":443\"}]"
-            print "                }"
-            print "              ]"
-            print "            }"
-            print "          ],"
-            print "          \"protocols\": [\"h1\",\"h2c\"]"
-            print "        }"
-            print "      }"
-            print "    },"
-            print "    \"tls\": {"
-            print "      \"certificates\": {"
-            print "        \"automate\": [\"" domain "\"]"
-            print "      },"
-            print "      \"automation\": {"
-            print "        \"policies\": ["
-            print "          {"
-            print "            \"issuers\": ["
-            print "              {"
-            print "                \"module\": \"acme\""
-            print "              }"
-            print "            ]"
-            print "          }"
-            print "        ]"
-            print "      }"
-            print "    }"
-            print "  }"
-            print "}"
-        }
-    ' > "$caddy_config"
+        BEGIN { print "{"; print "  \"logging\": {"; print "    \"logs\": {"; print "      \"default\": {"; print "        \"writer\": {"; print "          \"output\": \"file\","; print "          \"filename\": \"/var/log/caddy.log\""; print "        },"; print "        \"level\": \"WARN\""; print "      }"; print "    }"; print "  },"; print "  \"storage\": {"; print "    \"module\": \"file_system\","; print "    \"root\": \"/etc/ssl\""; print "  },"; print "  \"apps\": {"; print "    \"http\": {"; print "      \"servers\": {"; print "        \"h1\": {"; print "          \"listen\": [\":80\"],"; print "          \"routes\": ["; print "            {"; print "              \"handle\": ["; print "                {"; print "                  \"handler\": \"static_response\","; print "                  \"headers\": {"; print "                    \"Location\": [\"https://{http.request.host}{http.request.uri}\"]"; print "                  },"; print "                  \"status_code\": 301"; print "                }"; print "              ]"; print "            }"; print "          ],"; print "          \"protocols\": [\"h1\"]"; print "        },"; print "        \"h1h2c\": {"; print "          \"listen\": [\"127.0.0.1:" fallback_port "\"],"; print "          \"routes\": ["; print "            {"; print "              \"handle\": ["; print "                {"; print "                  \"handler\": \"headers\","; print "                  \"response\": {"; print "                    \"set\": {"; print "                      \"Strict-Transport-Security\": [\"max-age=31536000; includeSubDomains; preload\"]"; print "                    }"; print "                  }"; print "                },"; print "                {"; print "                  \"handler\": \"reverse_proxy\","; print "                  \"headers\": {"; print "                    \"request\": {"; print "                      \"set\": {"; print "                        \"Host\": [\"{http.reverse_proxy.upstream.hostport}\"],"; print "                        \"X-Forwarded-Host\": [\"{http.request.host}\"]"; print "                      }"; print "                    }"; print "                  },"; print "                  \"transport\": {"; print "                    \"protocol\": \"http\","; print "                    \"tls\": {}"; print "                  },"; print "                  \"upstreams\": [{\"dial\": \"" fake_domain ":443\"}]"; print "                }"; print "              ]"; print "            }"; print "          ],"; print "          \"protocols\": [\"h1\",\"h2c\"]"; print "        }"; print "      }"; print "    },"; print "    \"tls\": {"; print "      \"certificates\": {"; print "        \"automate\": [\"" domain "\"]"; print "      },"; print "      \"automation\": {"; print "        \"policies\": ["; print "          {"; print "            \"issuers\": ["; print "              {"; print "                \"module\": \"acme\""; print "              }"; print "            ]"; print "          }"; print "        ]"; print "      }"; print "    }"; print "  }"; print "}"; 
+        }' > "$caddy_config" 
 }
 
 function update_route_file() {
@@ -2018,34 +1963,7 @@ function update_outbound_file() {
                         print $0
                     }
                 }
-                print "    {"
-                print "      \"type\": \"direct\","
-                print "      \"tag\": \"warp-IPv4-out\","
-                print "      \"detour\": \"wireguard-out\","
-                print "      \"domain_strategy\": \"ipv4_only\""
-                print "    },"
-                print "    {"
-                print "      \"type\": \"direct\","
-                print "      \"tag\": \"warp-IPv6-out\","
-                print "      \"detour\": \"wireguard-out\","
-                print "      \"domain_strategy\": \"ipv6_only\""
-                print "    },"
-                print "    {"
-                print "      \"type\": \"wireguard\","
-                print "      \"tag\": \"wireguard-out\","
-                print "      \"server\": \"" server "\","
-                print "      \"server_port\": " server_port ","
-                print "      \"system_interface\": false,"
-                print "      \"interface_name\": \"wg0\","
-                print "      \"local_address\": ["
-                print "        \"" local_address_ipv4 "\","
-                print "        \"" local_address_ipv6 "\""
-                print "      ],"
-                print "      \"private_key\": \"" private_key "\","
-                print "      \"peer_public_key\": \"" peer_public_key "\","
-                print "      \"reserved\": " reserved ","
-                print "      \"mtu\": " mtu
-                print "    }"
+                print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"warp-IPv4-out\","; print "      \"detour\": \"wireguard-out\","; print "      \"domain_strategy\": \"ipv4_only\""; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"warp-IPv6-out\","; print "      \"detour\": \"wireguard-out\","; print "      \"domain_strategy\": \"ipv6_only\""; print "    },"; print "    {"; print "      \"type\": \"wireguard\","; print "      \"tag\": \"wireguard-out\","; print "      \"server\": \"" server "\","; print "      \"server_port\": " server_port ","; print "      \"system_interface\": false,"; print "      \"interface_name\": \"wg0\","; print "      \"local_address\": ["; print "        \"" local_address_ipv4 "\","; print "        \"" local_address_ipv6 "\"" ; print "      ],"; print "      \"private_key\": \"" private_key "\","; print "      \"peer_public_key\": \"" peer_public_key "\","; print "      \"reserved\": " reserved ","; print "      \"mtu\": " mtu; print "    }"
             } else {
                 print $0
             }
