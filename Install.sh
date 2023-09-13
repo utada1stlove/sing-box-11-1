@@ -989,6 +989,11 @@ function get_domain() {
 
         resolved_ipv4=$(dig +short A "$domain" 2>/dev/null)
         resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
+        echo "输入的域名：$domain"
+        echo "本地IPv4地址：$local_ip_v4"
+        echo "本地IPv6地址：$local_ip_v6"
+        echo "解析的IPv4地址：$resolved_ipv4"
+        echo "解析的IPv6地址：$resolved_ipv6"
 
         if [[ -z $domain ]]; then
             echo -e "${RED}错误：域名不能为空，请重新输入。${NC}"
