@@ -1978,79 +1978,273 @@ function update_outbound_file() {
     echo "warp配置完成。"
 }
 
-function display_reality_config() {
-    local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"   
-    local local_ip
-    local_ip=$(get_local_ip)       
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
-    local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
-    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
-    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
-    local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
-    local public_key=$(cat /tmp/public_key_temp.txt)
-    if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
-        transport_type="tcp"
-    fi
-
-    echo -e "${CYAN}Vless+Reality 节点配置信息：${NC}" | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
-    echo "服务器地址: $local_ip" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "监听端口: $listen_port" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "用户 UUID：  $users" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "流控类型: $flow_type" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "传输层协议: $transport_type" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "ServerName: $server_name" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "目标网站地址: $target_server" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "Short ID:" | tee -a "$output_file"
-    echo "$short_ids" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "PublicKey: $public_key" | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file"
+function generate_random_filename() {
+    local dir="/usr/local/etc/sing-box"
+    local filename=""    
+    while true; do
+        random_value=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 5 | head -n 1)        
+        win_filename="win_client_${random_value}.json"
+        phone_filename="phone_client_${random_value}.json"        
+        if [ ! -e "${dir}/${win_filename}" ] && [ ! -e "${dir}/${phone_filename}" ]; then
+            touch "${dir}/${win_filename}"
+            touch "${dir}/${phone_filename}"
+            win_client_filename="${dir}/${win_filename}"
+            phone_client_filename="${dir}/${phone_filename}"
+            break
+        fi
+    done
 }
 
-function display_trojan_config() {
+function write_phone_client_file() {
+    local phone_client_file="$phone_client_filename"
+    awk -v phone_client_file="$phone_client_file" 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"proxy\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"remote\","; print "        \"address\": \"fakeip\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"query_type\": ["; print "          \"A\","; print "          \"AAAA\""; print "        ],"; print "        \"server\": \"remote\""; print "      }"; print "    ],"; print "    \"fakeip\": {"; print "      \"enabled\": true,"; print "      \"inet4_range\": \"198.18.0.0/15\","; print "      \"inet6_range\": \"fc00::/18\""; print "    },"; print "    \"strategy\": \"prefer_ipv4\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"tun\","; print "      \"tag\": \"tun-in\","; print "      \"inet4_address\": \"172.19.0.1/30\","; print "      \"inet6_address\": \"fdfe:dcba:9876::1/126\","; print "      \"mtu\": 9000,"; print "      \"auto_route\": true,"; print "      \"strict_route\": true,"; print "      \"stack\": \"gvisor\","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "$phone_client_file"    
+}
+
+function write_win_client_file() {
+    local win_client_file="$win_client_filename"
+    awk -v win_client_file="$win_client_file" 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"proxy\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"remote\","; print "        \"address\": \"fakeip\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"query_type\": ["; print "          \"A\","; print "          \"AAAA\""; print "        ],"; print "        \"server\": \"remote\""; print "      }"; print "    ],"; print "    \"fakeip\": {"; print "      \"enabled\": true,"; print "      \"inet4_range\": \"198.18.0.0/15\","; print "      \"inet6_range\": \"fc00::/18\""; print "    },"; print "    \"strategy\": \"prefer_ipv4\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"mixed\","; print "      \"tag\": \"mixed-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": 1080,"; print "      \"sniff\": true,"; print "      \"set_system_proxy\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "$win_client_file"
+}
+
+function generate_shadowsocks_win_client_config() {
+  local win_client_file="$win_client_filename"  
+  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"method\": \"" ss_method "\", "; print "      \"password\": \"" ss_password "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"protocol\": \"smux\","; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4,"; print "        \"max_streams\": 0"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+}
+
+function generate_shadowsocks_phone_client_config() {
+  local phone_client_file="$phone_client_filename"  
+  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"method\": \"" ss_method "\", "; print "      \"password\": \"" ss_password "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"protocol\": \"smux\","; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4,"; print "        \"max_streams\": 0"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
+function generate_tuic_phone_client_config() {
+  local phone_client_file="$phone_client_filename"  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
+function generate_tuic_win_client_config() {
+  local win_client_file="$win_client_filename"  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+}
+
+function generate_Hysteria_win_client_config() {
+  local win_client_file="$win_client_filename"  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+}
+
+function generate_Hysteria_phone_client_config() {
+  local phone_client_file="$phone_client_filename"  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
+function generate_Hysteria2_phone_client_config() {
+  local phone_client_file="$phone_client_filename"  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
+function generate_Hysteria2_win_client_config() {
+  local win_client_file="$win_client_filename"  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+}
+
+function generate_vless_win_client_config() {
+  local win_client_file="$win_client_filename"
+  local extra_config=""  
+  if [[ -z "$flow_type" ]]; then
+    extra_config='
+      "transport": {
+        "type": "'"$transport_type"'"
+      },'
+  fi  
+  awk -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v extra_config="$extra_config" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," extra_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"  
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至 $win_client_file，请下载后使用！"
+}
+
+function generate_vless_phone_client_config() {
+  local phone_client_file="$phone_client_filename"
+  local extra_config=""  
+  if [[ -z "$flow_type" ]]; then
+    extra_config='
+      "transport": {
+        "type": "'"$transport_type"'"
+      },'
+  fi  
+  awk -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v extra_config="$extra_config" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," extra_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"  
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至 $phone_client_file，请下载后使用！"
+}
+
+function generate_trojan_phone_client_config() {
+  local phone_client_file="$phone_client_filename"
+  local extra_config=""  
+  if [ "$transport_type" != "null" ]; then
+    extra_config='
+      "transport": {
+        "type": "ws",
+        "path": "'"$transport_path"'"
+      },'
+  fi  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v extra_config="$extra_config" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," extra_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"  
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至 $phone_client_file，请下载后使用！"
+}
+
+function generate_trojan_win_client_config() {
+  local win_client_file="$win_client_filename"
+  local extra_config=""  
+  if [ "$transport_type" != "null" ]; then
+    extra_config='
+      "transport": {
+        "type": "ws",
+        "path": "'"$transport_path"'"
+      },'
+  fi  
+  awk -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v extra_config="$extra_config" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," extra_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"  
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至 $win_client_file，请下载后使用！"
+}
+
+function generate_shadowtls_win_client_config() {
+  local win_client_file="$win_client_filename"  
+  awk -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"st-out\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"proxy\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"proxy\", "; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+}
+
+function generate_shadowtls_phone_client_config() {
+  local phone_client_file="$phone_client_filename"  
+  awk -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"st-out\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"proxy\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"proxy\", "; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
+function generate_naive_random_filename() {
+    local dir="/usr/local/etc/sing-box"
+    local filename=""    
+    while true; do
+        random_value=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 5 | head -n 1)        
+        filename="naive_client_${random_value}.json"       
+        if [ ! -e "${dir}/${filename}" ]; then
+            touch "${dir}/${filename}"
+            naive_client_filename="${dir}/${filename}"
+            break
+        fi
+    done
+}
+
+function write_naive_client_file() {
+    local naive_client_file="$naive_client_filename"
+    awk -v naive_client_file="$naive_client_file" 'BEGIN { print "{"; print "  \"listen\":  \"socks://127.0.0.1:1080\","; print "  \"proxy\": \"https://username:password@server_name:listen_port\""; print "}" }' > "$naive_client_file"
+}
+
+function generate_naive_win_client_config() {
+    local naive_client_file="$naive_client_filename"
+    local username="$1"
+    local password="$2"
+    local listen_port="$3"
+    local server_name="$4"
+    sed -i "s/username/$username/" "$naive_client_file"
+    sed -i "s/password/$password/" "$naive_client_file"
+    sed -i "s/listen_port/$listen_port/" "$naive_client_file"
+    sed -i "s/server_name/$server_name/" "$naive_client_file"
+    echo "电脑端配置文件已保存至$naive_client_file，请下载后使用！"
+}
+
+function display_NaiveProxy_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"  
+    local output_file="/usr/local/etc/sing-box/output.txt" 
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
-    local password_list=""
-    for password in "${passwords[@]}"; do
-        password_list+="\n$password"
-    done
-    local alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
-    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
-    local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
-
-    echo -e "${CYAN}trojan 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "地址: $server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                                \(.password)"' "$config_file")  
+    echo -e "${CYAN}NaiveProxy 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "服务器地址: $server_name"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"        
     echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo -e "密码:$password_list"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "ALPN: $alpn"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    if [ "$transport_type" != "null" ]; then
-        echo "传输协议: $transport_type"  | tee -a "$output_file"
-        echo "路径: $transport_path"  | tee -a "$output_file"
-    else
-        echo "传输协议: tcp"  | tee -a "$output_file"
-    fi
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "用 户 名                                  密  码"  | tee -a "$output_file"
+    echo "----------------------------------------------------------------"  | tee -a "$output_file"
+    echo "$users"  | tee -a "$output_file" 
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file" 
+    IFS=$'\n'
+    for user_info in $users; do
+        local username=$(echo "$user_info" | awk '{print $1}')
+        local password=$(echo "$user_info" | awk '{print $2}')        
+        generate_naive_random_filename
+        write_naive_client_file
+        generate_naive_win_client_config "$username" "$password" "$listen_port" "$server_name"        
+    done
+    unset IFS
+}
+
+function display_Direct_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"    
+    local local_ip
+    local_ip=$(get_local_ip)
+    local override_address=$(jq -r '.inbounds[0].override_address' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local override_port=$(jq -r '.inbounds[0].override_port' "$config_file")  
+    echo -e "${CYAN}Direct 节点配置信息：${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "中转地址: $local_ip" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "目标地址: $override_address" | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "目标端口: $override_port" | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file" 
+       
+}
+
+function display_juicity_config() {
+    local config_file="/usr/local/etc/juicity/config.json"
+    local output_file="/usr/local/etc/juicity/output.txt"  
+    local listen_port=$(jq -r '.listen' "$config_file" | sed 's/\://')
+    local UUIDS=$(jq -r '.users | to_entries[] | "UUID: \(.key)\t密码: \(.value)"' "$config_file")
+    local congestion_control=$(jq -r '.congestion_control' "$config_file")  
+    echo -e "${CYAN}juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo "监听端口: $listen_port"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo "UUID和密码:"  | tee -a "$output_file" 
+    echo "$UUIDS"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "拥塞控制算法: $congestion_control"  | tee -a "$output_file" 
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "配置信息已保存至 $output_file"
+    echo "配置信息已保存至 $output_file"    
 }
 
 function display_tuic_config() {
@@ -2061,7 +2255,6 @@ function display_tuic_config() {
     local users=$(jq -r '.inbounds[0].users[] | "\(.name)     \(.uuid)     \(.password)"' "$config_file")
     local congestion_control=$(jq -r '.inbounds[0].congestion_control' "$config_file")
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")    
-  
     echo -e "${CYAN}TUIC 节点配置信息：${NC}"  | tee -a "$output_file"     
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
     echo "服务器地址: $server_name"  | tee -a "$output_file"
@@ -2078,7 +2271,44 @@ function display_tuic_config() {
     echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "ALPN: $alpn"  | tee -a "$output_file"     
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "配置信息已保存至 $output_file"    
+    echo "配置信息已保存至 $output_file" 
+    local IFS=$'\n'
+    local user_array=($(echo "$users"))
+    unset IFS
+    for user_info in "${user_array[@]}"; do
+        IFS=' ' read -r username uuid password <<< "$user_info"
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file        
+        generate_tuic_win_client_config "$uuid" "$password"
+        generate_tuic_phone_client_config "$uuid" "$password"
+    done
+}
+
+function display_Shadowsocks_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt" 
+    local local_ip
+    local_ip=$(get_local_ip)
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
+    local ss_password=$(jq -r '.inbounds[0].password' "$config_file")  
+    echo -e "${CYAN}Shadowsocks 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "服务器地址: $local_ip"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "加密方式: $ss_method"  | tee -a "$output_file"
+    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "密码: $ss_password"  | tee -a "$output_file"
+    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file" 
+    generate_random_filename
+    write_phone_client_file
+    write_win_client_file
+    generate_shadowsocks_win_client_config
+    generate_shadowsocks_phone_client_config
 }
 
 function display_Hysteria_config() {
@@ -2087,25 +2317,33 @@ function display_Hysteria_config() {
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
     echo -e "${CYAN}Hysteria 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}======================================================================================${NC}"  | tee -a "$output_file" 
     echo "服务器地址：$server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "监听端口：$listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "上行速度：${up_mbps}Mbps"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "下行速度：${down_mbps}Mbps"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "ALPN：$alpn"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "用户密码："
-    local user_count=$(echo "$users" | jq length)
+    local user_count=$(echo "$users" | jq length)    
     for ((i = 0; i < user_count; i++)); do
         local auth_str=$(echo "$users" | jq -r ".[$i].auth_str")
         echo "用户$i: $auth_str"  | tee -a "$output_file"
     done
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
-    echo "配置信息已保存至 $output_file"
+    echo -e "${CYAN}======================================================================================${NC}"  | tee -a "$output_file" 
+    echo "配置信息已保存至 $output_file"   
+    for ((i = 0; i < user_count; i++)); do
+        local auth_str=$(echo "$users" | jq -r ".[$i].auth_str")
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file
+        generate_Hysteria_win_client_config "$auth_str"
+        generate_Hysteria_phone_client_config "$auth_str"
+    done
 }
 
 function display_Hy2_config() {
@@ -2131,8 +2369,101 @@ function display_Hy2_config() {
         local password=$(echo "$users" | jq -r ".[$i].password")
         echo "用户$i: $password"  | tee -a "$output_file"
     done
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "配置信息已保存至 $output_file"     
+    for ((i = 0; i < user_count; i++)); do
+        local password=$(echo "$users" | jq -r ".[$i].password")
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file
+        generate_Hysteria2_win_client_config "$password"
+        generate_Hysteria2_phone_client_config "$password"
+    done    
+}
+
+function display_reality_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"   
+    local local_ip
+    local_ip=$(get_local_ip)       
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
+    local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
+    local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
+    local public_key=$(cat /tmp/public_key_temp.txt)
+    if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
+        transport_type="tcp"
+    fi
+    echo -e "${CYAN}Vless+Reality 节点配置信息：${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo "服务器地址: $local_ip" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "用户 UUID：  $users" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "流控类型: $flow_type" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "传输层协议: $transport_type" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "ServerName: $server_name" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "目标网站地址: $target_server" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "Short ID:" | tee -a "$output_file"
+    echo "$short_ids" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "PublicKey: $public_key" | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"
+    for short_id in $short_ids; do   
+    generate_random_filename
+    write_phone_client_file
+    write_win_client_file
+    generate_vless_win_client_config "$short_id"
+    generate_vless_phone_client_config "$short_id"
+    done
+}
+
+function display_trojan_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"  
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
+    local alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
+    echo -e "${CYAN}trojan 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "服务器地址: $server_name"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    for ((i = 0; i < ${#passwords[@]}; i++)); do
+        local password="${passwords[i]}" 
+        echo -e "密码 $i: $password"  | tee -a "$output_file"
+    done    
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    if [ "$transport_type" != "null" ]; then
+        echo "传输协议: $transport_type"  | tee -a "$output_file"
+        echo "路径: $transport_path"  | tee -a "$output_file"
+    else
+        echo "传输协议: tcp"  | tee -a "$output_file"
+    fi
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file"
+    for ((i = 0; i < ${#passwords[@]}; i++)); do
+        local password="${passwords[i]}" 
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file
+        generate_trojan_win_client_config
+        generate_trojan_phone_client_config
+    done
 }
 
 function display_shadowtls_config() {
@@ -2141,106 +2472,37 @@ function display_shadowtls_config() {
     local local_ip
     local_ip=$(get_local_ip)    
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
-    local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "ShadowTLS 密码: \(.password)"' "$config_file")
+    local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "\(.password)"' "$config_file")
     local user_input=$(jq -r '.inbounds[0].handshake.server' "$config_file")
-    local ss_password=$(jq -r '.inbounds[1].password' "$config_file")    
-
+    local ss_password=$(jq -r '.inbounds[1].password' "$config_file")  
+    local method=$(jq -r '.inbounds[1].method' "$config_file")     
     echo -e "${CYAN}ShadowTLS 节点配置信息：${NC}" | tee -a "$output_file"
     echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
     echo "服务器地址: $local_ip" | tee -a "$output_file"
     echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "监听端口: $listen_port" | tee -a "$output_file"
     echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo "加密方式: $method" | tee -a "$output_file"    
+    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"   
+    echo "ShadowTLS 密码:" | tee -a "$output_file" 
     echo "$shadowtls_passwords" | tee -a "$output_file"
     echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "Shadowsocks 密码: $ss_password" | tee -a "$output_file"
     echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "握手服务器地址: $user_input" | tee -a "$output_file"
     echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file"
-}
-
-function display_Direct_config() {
-    local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"    
-    local local_ip
-    local_ip=$(get_local_ip)
-    local override_address=$(jq -r '.inbounds[0].override_address' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local override_port=$(jq -r '.inbounds[0].override_port' "$config_file")
-  
-    echo -e "${CYAN}Direct 节点配置信息：${NC}" | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "中转地址: $local_ip" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "监听端口: $listen_port" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "目标地址: $override_address" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "目标端口: $override_port" | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"    
-}
-
-function display_Shadowsocks_config() {
-    local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt" 
-    local local_ip
-    local_ip=$(get_local_ip)
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
-    local ss_password=$(jq -r '.inbounds[0].password' "$config_file")
-  
-    echo -e "${CYAN}Shadowsocks 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "服务器地址: $local_ip"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "加密方式: $ss_method"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "密码: $ss_password"  | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file" 
-}
-
-function display_NaiveProxy_config() {
-    local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt" 
-    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                                \(.password)"' "$config_file")
-  
-    echo -e "${CYAN}NaiveProxy 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "服务器地址: $server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"        
-    echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "用 户 名                                  密  码"  | tee -a "$output_file"
-    echo "----------------------------------------------------------------"  | tee -a "$output_file"
-    echo "$users"  | tee -a "$output_file" 
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file" 
-}
-
-function display_juicity_config() {
-    local config_file="/usr/local/etc/juicity/config.json"
-    local output_file="/usr/local/etc/juicity/output.txt"  
-    local listen_port=$(jq -r '.listen' "$config_file" | sed 's/\://')
-    local UUIDS=$(jq -r '.users | to_entries[] | "UUID: \(.key)\t密码: \(.value)"' "$config_file")
-    local congestion_control=$(jq -r '.congestion_control' "$config_file")
-  
-    echo -e "${CYAN}juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
-    echo "监听端口: $listen_port"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
-    echo "UUID和密码:"  | tee -a "$output_file" 
-    echo "$UUIDS"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
-    echo "拥塞控制算法: $congestion_control"  | tee -a "$output_file" 
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "配置信息已保存至 $output_file"    
+    local IFS=$'\n'
+    local shadowtls_password=($(echo "$shadowtls_passwords"))
+    unset IFS
+    for shadowtls_password in "${shadowtls_password[@]}"; do
+        IFS=' ' read -r password <<< "$shadowtls_password"
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file
+        generate_shadowtls_win_client_config "$shadowtls_password"
+        generate_shadowtls_phone_client_config "$shadowtls_password"
+    done    
 }
 
 function view_saved_config() {
