@@ -1362,8 +1362,6 @@ function configure_short_ids() {
     short_ids=${short_ids%,}
 }
 
-
-
 function tuic_multiple_users() {
     users="[
         {
