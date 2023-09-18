@@ -1362,6 +1362,8 @@ function configure_short_ids() {
     short_ids=${short_ids%,}
 }
 
+
+
 function tuic_multiple_users() {
     users="[
         {
@@ -1398,6 +1400,38 @@ function tuic_multiple_users() {
 }
 
 function naive_multiple_users() {
+    users="[
+        {
+          \"username\": \"$username\",
+          \"password\": \"$password\"
+        }"
+
+    while true; do
+        read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
+
+        if [[ -z "$add_multiple_users" ]]; then
+            add_multiple_users="N"
+        fi
+
+        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            set_username
+            set_password
+            users+=",
+        {
+          \"username\": \"$username\",
+          \"password\": \"$password\"
+        }"
+        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            break
+        else
+            echo -e "${RED}无效的输入，请重新输入。${NC}"
+        fi
+    done
+
+    users+=$'\n      ]'
+}
+
+function socks_multiple_users() {
     users="[
         {
           \"username\": \"$username\",
@@ -1648,6 +1682,26 @@ function generate_ss_config() {
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
         found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"method\": \"" ss_method "\","; print "      \"password\": \"" ss_password "\""; print "    },"; found_inbounds=0}
+    ' "$config_file" > "$config_file.tmp"
+    mv "$config_file.tmp" "$config_file"
+}
+
+function generate_socks_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local tag_label
+    generate_unique_tag
+    listen_port
+    set_username
+    set_password    
+    socks_multiple_users    
+    local found_rules=0
+    local found_inbounds=0
+    awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" '
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
+        {print}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ""; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1950,6 +2004,22 @@ function generate_tuic_win_client_config() {
   echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
+function generate_socks_win_client_config() {
+  local win_client_file="$win_client_filename"  
+  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+}
+
+function generate_socks_phone_client_config() {
+  local phone_client_file="$phone_client_filename"  
+  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
+    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
 function generate_Hysteria_win_client_config() {
   local win_client_file="$win_client_filename"  
   awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
@@ -2089,7 +2159,8 @@ function display_Direct_config() {
     echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "目标端口: $override_port" | tee -a "$output_file"
     echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file"        
+    echo "配置信息已保存至 $output_file" 
+       
 }
 
 function display_juicity_config() {
@@ -2172,6 +2243,39 @@ function display_Shadowsocks_config() {
     write_win_client_file
     generate_shadowsocks_win_client_config
     generate_shadowsocks_phone_client_config
+}
+
+function display_socks_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt" 
+    local local_ip
+    local_ip=$(get_local_ip)   
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")         
+    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                \(.password)"' "$config_file") 
+    echo -e "${CYAN}SOCKS 节点配置信息：${NC}"  | tee -a "$output_file"     
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo "服务器地址: $local_ip"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"      
+    echo "监听端口: $listen_port"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo "用户密码列表:"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------"  | tee -a "$output_file"
+    echo "  用户名                    密码"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------"  | tee -a "$output_file" 
+    echo "$users"  | tee -a "$output_file" 
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo "配置信息已保存至 $output_file" 
+    local IFS=$'\n'
+    local user_array=($(echo "$users"))
+    unset IFS
+    for user_info in "${user_array[@]}"; do
+        IFS=' ' read -r username password <<< "$user_info"
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file        
+        generate_socks_win_client_config "$username" "$password"
+        generate_socks_phone_client_config "$username" "$password"
+    done
 }
 
 function display_Hysteria_config() {
@@ -2511,6 +2615,19 @@ function Shadowsocks_install() {
     display_Shadowsocks_config
 }
 
+function socks_install() {
+    install_sing_box
+    log_outbound_config    
+    generate_socks_config
+    modify_format_inbounds_and_outbounds
+    check_firewall_configuration 
+    systemctl daemon-reload   
+    systemctl enable sing-box   
+    systemctl start sing-box
+    systemctl restart sing-box
+    display_socks_config
+}
+
 function NaiveProxy_install() {
     install_sing_box 
     log_outbound_config        
@@ -2629,14 +2746,15 @@ echo -e "║ ${CYAN}Telegram 群组${NC}: https://t.me/mrxiao758                
 echo -e "║ ${CYAN}YouTube频道${NC}: https://youtube.com/@Mr_xiao502                           ║"
 echo "╠════════════════════════════════════════════════════════════════════════╣"
 echo "║ 请选择要执行的操作：                                                   ║"
-echo -e "║${CYAN} [1]${NC}  TUIC                   ${CYAN} [2]${NC}  Juicity                              ║"
-echo -e "║${CYAN} [3]${NC}  Vless                  ${CYAN} [4]${NC}  Direct                               ║"
-echo -e "║${CYAN} [5]${NC}  Trojan                 ${CYAN} [6]${NC}  Hysteria                             ║"
-echo -e "║${CYAN} [7]${NC}  ShadowTLS              ${CYAN} [8]${NC}  NaiveProxy                           ║"
-echo -e "║${CYAN} [9]${NC}  Shadowsocks            ${CYAN} [10]${NC} WireGuard                            ║"
-echo -e "║${CYAN} [11]${NC} Hysteria2              ${CYAN} [12]${NC} 查看节点信息                         ║"
-echo -e "║${CYAN} [13]${NC} 重启服务               ${CYAN} [14]${NC} 更新代理工具                         ║"
-echo -e "║${CYAN} [15]${NC} 卸载                   ${CYAN} [0]${NC}  退出                                 ║"
+echo -e "║${CYAN} [1]${NC}  Socks                   ${CYAN} [2]${NC}  Direct                              ║"
+echo -e "║${CYAN} [3]${NC}  Vless                   ${CYAN} [4]${NC}  TUIC                                ║"
+echo -e "║${CYAN} [5]${NC}  Juicity                 ${CYAN} [6]${NC}  Trojan                              ║"
+echo -e "║${CYAN} [7]${NC}  Hysteria                ${CYAN} [8]${NC}  Hysteria2                           ║"
+echo -e "║${CYAN} [9]${NC}  ShadowTLS               ${CYAN} [10]${NC} NaiveProxy                          ║"
+echo -e "║${CYAN} [11]${NC} Shadowsocks             ${CYAN} [12]${NC} WireGuard                           ║"
+echo -e "║${CYAN} [13]${NC} 查看节点信息            ${CYAN} [14]${NC} 更新代理工具                        ║"
+echo -e "║${CYAN} [15]${NC} 重启服务                ${CYAN} [16]${NC} 卸载                                ║"
+echo -e "║${CYAN} [0]${NC}  退出                                                              ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
@@ -2644,49 +2762,52 @@ echo "╚═══════════════════════�
 
     case $choice in
         1)
-            tuic_install
+            socks_install
             ;;
         2)
-            juicity_install
+            Direct_install
             ;;            
         3)
             reality_install
             ;;
         4)
-            Direct_install
+            tuic_install
             ;;
         5)
-            trojan_install
+            juicity_install
             ;;                
         6)
-            Hysteria_install
+            trojan_install
             ;;
         7)
-            shadowtls_install
+            Hysteria_install
             ;;
         8)
-            NaiveProxy_install
+            Hysteria2_install
             ;;
         9)
-            Shadowsocks_install
+            shadowtls_install
             ;; 
         10)
-            wireguard_install
+            NaiveProxy_install
             ;;  
         11)
-            Hysteria2_install
-            ;;                           
+            Shadowsocks_install
+            ;;
         12)
+            wireguard_install
+            ;;                                       
+        13)
             view_saved_config
             ;;
 
-        13)
-            check_and_restart_services
-            ;;
         14)
             update_proxy_tool
-            ;;             
+            ;;
         15)
+            check_and_restart_services
+            ;;             
+        16)
             uninstall
             ;;                   
         0)
