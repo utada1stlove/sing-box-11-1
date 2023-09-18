@@ -4,7 +4,7 @@
 - **脚本支持 warp 解锁 ChatGPT、Netflix、Disney+。**
 - **脚本支持多用户。**
 - **脚本支持多种协议共存。**
-- **脚本支持生成sing-box客户端配置文件，电脑端使用方法：下载生成的win_client_&&&.json文件U+2192**
+- **脚本支持生成sing-box客户端配置文件，电脑端使用方法：下载生成的win_client_&&&.json文件This is a right arrow: →**
 
 # **安装**
 - **Debian&&Ubuntu使用以下命令安装依赖**
