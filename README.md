@@ -2,7 +2,9 @@
 - **脚本支持IPV6单栈机。**
 - **脚本支持 CentOS 8+、Debian 10+、Ubuntu 20+ 操作系统。**
 - **脚本支持 warp 解锁 ChatGPT、Netflix、Disney+。**
-- **脚本支持多协议共存。**
+- **脚本支持多用户。**
+- **脚本支持多种协议共存。**
+- **脚本支持生成sing-box客户端配置文件，电脑端使用方法：下载生成的win_client_&&&.json文件U+2192**
 
 # **安装**
 - **Debian&&Ubuntu使用以下命令安装依赖**
@@ -121,16 +123,19 @@ service iptables save
 ```
 
 # **脚本支持的节点类型**
+- **Socks**
 - **TUIC V5**
 - **juicity**
-- **WireGuard**
+- **WireGuard--解锁 ChatGPT、Netflix、Disney+**
 - **Hysteria2**
 - **Vless+vision+Reality**
 - **Vless+h2+Reality**
 - **Vless+gRPC+Reality**
 - **Direct--sing-box版任意门**
-- **Trojan+tcp+tls+web**
-- **Trojan+ws+tls+(CDN)**
+- **Trojan+tcp+tls**
+- **Trojan+H2C+tls**
+- **Trojan+gRPC+tls**
+- **Trojan+ws+tls--可套CDN**
 - **Hysteria**
 - **ShadowTLS V3**
 - **NaiveProxy**
