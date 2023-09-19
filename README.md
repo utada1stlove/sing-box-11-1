@@ -137,8 +137,16 @@ service iptables save
 - **Trojan+tcp+tls**
 - **Trojan+H2C+tls**
 - **Trojan+gRPC+tls**
-- **Trojan+ws+tls--可套CDN**
+- **Trojan+ws+tls**
 - **Hysteria**
 - **ShadowTLS V3**
 - **NaiveProxy**
 - **Shadowsocks**
+- **Vmess+tcp**
+- **Vmess+ws**
+- **Vmess+grpc**   
+- **Vmess+tcp+tls**
+- **Vmess+ws+tls** 
+- **Vmess+h2+tls**
+- **Vmess+grpc+tls** 
+
