@@ -157,7 +157,6 @@ function check_firewall_configuration() {
             echo "Firewall configuration has been updated."
             ;;
         firewalld)
-            # IPv4 rules
             if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp" 2>/dev/null; then
                 firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent > /dev/null 2>&1
             fi
@@ -190,7 +189,6 @@ function check_firewall_configuration() {
                 firewall-cmd --zone=public --add-port=80/udp --permanent > /dev/null 2>&1
             fi
 
-            # IPv6 rules
             if ! firewall-cmd --zone=public --list-ports | grep -q "$listen_port/tcp" 2>/dev/null; then
                 firewall-cmd --zone=public --add-port="$listen_port/tcp" --permanent > /dev/null 2>&1
             fi
@@ -354,7 +352,7 @@ function select_sing_box_install_option() {
                 break
                 ;;
             *)
-                echo -e "${RED}无效的选择，请重新输入。${NC}"
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
                 ;;
         esac
     done
@@ -666,28 +664,28 @@ function set_password() {
 
 function read_up_speed() {
     while true; do
-        read -p "请输入上行速度 (默认50): " up_mbps
+        read -p "请输入上行速率 (默认50): " up_mbps
         up_mbps=${up_mbps:-50}
 
         if [[ $up_mbps =~ ^[0-9]+$ ]]; then
-            echo "上行速度设置成功：$up_mbps Mbps"
+            echo "上行速率设置成功：$up_mbps Mbps"
             break
         else
-            echo -e "${RED}错误：请输入数字作为上行速度。${NC}"
+            echo -e "${RED}错误：请输入数字作为上行速率！${NC}"
         fi
     done
 }
 
 function read_down_speed() {
     while true; do
-        read -p "请输入下行速度 (默认100): " down_mbps
+        read -p "请输入下行速率 (默认100): " down_mbps
         down_mbps=${down_mbps:-100}
 
         if [[ $down_mbps =~ ^[0-9]+$ ]]; then
-            echo "下行速度设置成功：$down_mbps Mbps"
+            echo "下行速率设置成功：$down_mbps Mbps"
             break
         else
-            echo -e "${RED}错误：请输入数字作为下行速度。${NC}"
+            echo -e "${RED}错误：请输入数字作为下行速率！${NC}"
         fi
     done
 }
@@ -698,7 +696,7 @@ function generate_uuid() {
     elif [[ -n $(command -v uuid) ]]; then
         command_name="uuid -v 4"
     else
-        echo -e "${RED}错误：无法生成UUID，请手动设置。${NC}"
+        echo -e "${RED}错误：无法生成UUID，请手动设置！${NC}"
         exit 1
     fi
 
@@ -709,7 +707,7 @@ function generate_uuid() {
                 uuid=$input_uuid
                 break
             else
-                echo -e "${RED}无效的UUID格式，请重新输入。${NC}"
+                echo -e "${RED}无效的UUID格式，请重新输入！${NC}"
             fi
         else
             uuid=$($command_name)
@@ -742,7 +740,7 @@ function set_short_id() {
         elif [[ "$short_id" =~ ^[0-9a-fA-F]{2,16}$ ]]; then
             break
         else
-            echo "错误：请输入两到八位的十六进制字符串。"
+            echo "错误：请输入两到八位的十六进制字符串！"
         fi
     done
 }
@@ -911,7 +909,7 @@ function get_local_ip() {
     elif [[ -n "$local_ip_v6" ]]; then
         echo "$local_ip_v6"
     else
-        echo "无法获取本机IP地址"
+        echo -e "${RED}无法获取本机IP地址！${NC}"
     fi
 }
 
@@ -926,7 +924,7 @@ function get_domain() {
         resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
 
         if [[ -z $domain ]]; then
-            echo -e "${RED}错误：域名不能为空，请重新输入。${NC}"
+            echo -e "${RED}错误：域名不能为空，请重新输入！${NC}"
         else
             if [[ ("$resolved_ipv4" == "$local_ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$local_ip_v6" && ! -z "$resolved_ipv6") ]]; then
                 break
@@ -943,7 +941,7 @@ function get_domain() {
                         break
                     fi
                 fi
-                echo -e "${RED}错误：域名未绑定本机IP，请重新输入。${NC}"
+                echo -e "${RED}错误：域名未绑定本机IP，请重新输入！${NC}"
             fi
         fi
     done
@@ -958,7 +956,7 @@ function get_fake_domain() {
             echo "伪装网址: $fake_domain"
             break
         else
-            echo -e "${RED}伪装网址无效或不可用，请重新输入。${NC}"
+            echo -e "${RED}伪装网址无效或不可用，请重新输入！${NC}"
         fi
     done
 }
@@ -973,10 +971,10 @@ function set_certificate_and_private_key() {
             allowed_extensions=("crt" "pem")
 
             if [[ ! -f "$certificate_path" ]]; then
-                echo -e "${RED}错误：证书文件不存在，请重新输入!${NC}"
+                echo -e "${RED}错误：证书文件不存在，请重新输入！${NC}"
                 continue
             elif [[ ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
-                echo -e "${RED}错误：不支持的证书格式，请配置.crt或.pem格式的证书文件!${NC}"
+                echo -e "${RED}错误：不支持的证书格式，请配置.crt或.pem格式的证书文件！${NC}"
                 continue
             fi
         fi
@@ -992,10 +990,10 @@ function set_certificate_and_private_key() {
             allowed_extensions=("key" "pem")
 
             if [[ ! -f "$private_key_path" ]]; then
-                echo -e "${RED}错误：私钥文件不存在，请重新输入!${NC}"
+                echo -e "${RED}错误：私钥文件不存在，请重新输入！${NC}"
                 continue
             elif [[ ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
-                echo -e "${RED}错误：不支持的私钥格式，请配置.key或.pem格式的私钥文件!${NC}"
+                echo -e "${RED}错误：不支持的私钥格式，请配置.key或.pem格式的私钥文件！${NC}"
                 continue
             fi
         fi
@@ -1023,8 +1021,10 @@ function apply_certificate() {
     fi
 
     echo "Installing the certificate..."
-    certificate_path=$(~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path")
-
+    certificate_info=$(
+        ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path" 2>/dev/null
+    )
+    certificate_path=$(echo "$certificate_info" | grep -oP '(?<=Installing key to: ).*(?=\n)|(?<=Installing full chain to: ).*')
     set_certificate_path="$certificate_path"
     set_private_key_path="$private_key_path"
 }
@@ -1046,6 +1046,64 @@ function generate_private_key() {
             echo -e "${RED}无效的私钥，请重新输入！${NC}"
         fi
     done    
+}
+
+function choose_node_type() {
+    while true; do
+        read -p "请选择节点类型（默认1）：
+1). Vmess+tcp
+2). Vmess+ws
+3). Vmess+grpc       
+4). Vmess+tcp+tls
+5). Vmess+ws+tls 
+6). Vmess+h2+tls
+7). Vmess+grpc+tls                      
+请选择 [1-7]: " node_type
+        if [ -z "$node_type" ]; then
+            node_type="1"
+        fi
+
+        case $node_type in
+            1)
+                transport_removed=true
+                tls_enabled=false
+                break
+                ;;
+            2)
+                transport_removed=false
+                tls_enabled=false
+                break
+                ;;
+            3)
+                transport_removed=false
+                tls_enabled=false
+                break
+                ;;
+            4)
+                transport_removed=true
+                tls_enabled=true
+                break
+                ;; 
+            5)
+                transport_removed=false
+                tls_enabled=true
+                break
+                ;; 
+            6)
+                transport_removed=false
+                tls_enabled=true
+                break
+                ;;
+            7)
+                transport_removed=false
+                tls_enabled=true
+                break
+                ;;                                                                               
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                ;;
+        esac
+    done
 }
 
 function encryption_method() {
@@ -1113,7 +1171,7 @@ function encryption_method() {
                 break
                 ;;                                                                
             *)
-                echo -e "${RED}错误：无效的选择，请重新输入。${NC}"
+                echo -e "${RED}错误：无效的选择，请重新输入！${NC}"
                 ;;
         esac
     done
@@ -1131,7 +1189,7 @@ function select_unlocked_items() {
             selected=($(echo "$choices" | sed 's/./& /g'))
             break
         else
-            echo -e "${RED}错误：无效的选择，请重新输入!${NC}"
+            echo -e "${RED}错误：无效的选择，请重新输入！${NC}"
         fi
     done
 }
@@ -1205,7 +1263,7 @@ function set_congestion_control() {
                 break
                 ;;
             *)
-                echo -e "${RED}错误：无效的选择，请重新输入。${NC}"
+                echo -e "${RED}错误：无效的选择，请重新输入！${NC}"
                 ;;
         esac
     done
@@ -1230,7 +1288,7 @@ function ask_certificate_option() {
                 ;;
 
             *)
-                echo -e "${RED}错误：无效的选择，请重新输入。${NC}"
+                echo -e "${RED}错误：无效的选择，请重新输入！${NC}"
                 ;;
         esac
     done
@@ -1271,14 +1329,39 @@ function select_flow_type() {
     done
 }
 
+function generate_tls_config() {    
+    if [ "$node_type" -ge 4 ] && [ "$node_type" -le 7 ]; then
+        tls_enabled=true
+        get_domain
+        set_certificate_and_private_key
+        certificate_path="$certificate_path"
+        private_key_path="$private_key_path"
+        ask_certificate_option                
+    else
+        tls_enabled=false
+    fi
+
+    if [ "$tls_enabled" = true ]; then
+        tls_config=",
+      \"tls\": {
+        \"enabled\": true,
+        \"server_name\": \"$domain\",
+        \"certificate_path\": \"$certificate_path\",
+        \"key_path\": \"$private_key_path\"
+      }"
+    else
+        tls_config=""
+    fi
+}
+
 function prompt_setup_type() {
     while true; do
-        echo "请选择传输层协议（默认1）："
-        echo "1). TCP（trojan+tcp+tls）"
-        echo "2). ws（trojan+ws+tls+CDN）"
-        echo "3). H2C（trojan+H2C+tls）"       
-        echo "4). gRPC（trojan+gRPC+tls）"
-        read -p "请选择 [1-4]: " setup_type
+        read -p "请选择传输层协议（默认1）：
+1). TCP（trojan+tcp+tls）
+2). ws（trojan+ws+tls+CDN）
+3). H2C（trojan+H2C+tls）       
+4). gRPC（trojan+gRPC+tls）
+请选择 [1-4]: " setup_type
         if [ -z "$setup_type" ]; then
             setup_type="1"
         fi
@@ -1286,26 +1369,22 @@ function prompt_setup_type() {
         case $setup_type in
             1)
                 transport_removed=true
-                fallback_removed=false
                 break
                 ;;
             2)
                 transport_removed=false
-                fallback_removed=true
                 break
                 ;;
             3)
                 transport_removed=false
-                fallback_removed=true
                 break
                 ;;
             4)
                 transport_removed=false
-                fallback_removed=true
                 break
                 ;;                                
             *)
-                echo -e "${RED}无效的选择，请重新输入!${NC}"
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
                 ;;
         esac
     done
@@ -1356,7 +1435,7 @@ function configure_short_ids() {
         elif [[ "$choice" == "n" || -z "$choice" ]]; then
             break
         else
-            echo "错误：请输入 'Y' 或 'N'。"
+            echo -e "${RED}错误：请输入 'Y' 或 'N'！${NC}"
         fi
     done
     short_ids=${short_ids%,}
@@ -1390,7 +1469,7 @@ function tuic_multiple_users() {
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
         else
-            echo -e "${RED}无效的输入，请重新输入。${NC}"
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
 
@@ -1422,7 +1501,38 @@ function naive_multiple_users() {
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
         else
-            echo -e "${RED}无效的输入，请重新输入。${NC}"
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
+        fi
+    done
+
+    users+=$'\n      ]'
+}
+
+function vmess_multiple_users() {
+    users="[
+        {
+          \"uuid\": \"$uuid\",
+          \"alterId\": 0
+        }"
+
+    while true; do
+        read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
+
+        if [[ -z "$add_multiple_users" ]]; then
+            add_multiple_users="N"
+        fi
+
+        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            generate_uuid
+            users+=",
+        {
+          \"uuid\": \"$uuid\",
+          \"alterId\": 0
+        }"
+        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            break
+        else
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
 
@@ -1454,7 +1564,7 @@ function socks_multiple_users() {
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
         else
-            echo -e "${RED}无效的输入，请重新输入。${NC}"
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
 
@@ -1486,7 +1596,7 @@ function hysteria_multiple_users() {
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
         else
-            echo -e "${RED}无效的输入，请重新输入。${NC}"
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
 
@@ -1518,7 +1628,7 @@ function hy2_multiple_users() {
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
         else
-            echo -e "${RED}无效的输入，请重新输入。${NC}"
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
 
@@ -1572,11 +1682,40 @@ function trojan_multiple_users() {
         elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
         else
-            echo -e "${RED}无效的输入，请重新输入。${NC}"
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
 
     users+=$'\n      ]'
+}
+
+function generate_vmess_transport_config() {    
+    if [[ $node_type == 2 || $node_type == 5 ]]; then
+        read -p "请输入 ws 路径 (默认随机生成): " transport_path_input
+        transport_path=${transport_path_input:-/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)}
+        if [[ ! "$transport_path" =~ ^/ ]]; then
+            transport_path="/$transport_path"
+        fi
+        transport_config="
+      \"transport\": {
+        \"type\": \"ws\",
+        \"path\": \"$transport_path\",
+        \"max_early_data\": 2048,
+        \"early_data_header_name\": \"Sec-WebSocket-Protocol\"
+      },"
+    elif [[ $node_type == 1 || $node_type == 4  ]]; then
+        transport_config=""
+    elif [[ $node_type == 3 || $node_type == 7 ]]; then
+        transport_config="
+      \"transport\": {
+        \"type\": \"grpc\"
+      },"
+    elif [[ $node_type == 6 ]]; then
+        transport_config="
+      \"transport\": {
+        \"type\": \"http\"
+      },"
+    fi
 }
 
 function prompt_and_generate_transport_config() {    
@@ -1683,6 +1822,30 @@ function generate_ss_config() {
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
+
+function generate_vmess_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local tag_label
+    generate_unique_tag
+    choose_node_type  
+    listen_port
+    generate_uuid
+    vmess_multiple_users     
+    generate_vmess_transport_config
+    check_firewall_configuration
+    generate_tls_config
+
+    local found_rules=0
+    local found_inbounds=0              
+    awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v transport_config="$transport_config" -v tls_config="$tls_config" '
+        /"rules": \[/{found_rules=1}
+        /"inbounds": \[/{found_inbounds=1}
+        {print}
+        found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true," transport_config ""; print "      \"users\": " users "" tls_config ""; print "    },"; found=0}
+    ' "$config_file" > "$config_file.tmp"
+    mv "$config_file.tmp" "$config_file"
+} 
 
 function generate_socks_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
@@ -2032,6 +2195,36 @@ function generate_Hysteria_phone_client_config() {
     /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
   echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+}
+
+function generate_vmess_win_client_config() {
+  local win_client_file="$win_client_filename"
+  local server_name_in_config=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+  
+  if [ "$server_name_in_config" != "null" ]; then
+    awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"  
+  else
+    awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  fi
+  mv "$win_client_file.tmp" "$win_client_file"
+  echo "电脑端配置文件已保存至 $win_client_file，请下载后使用！"
+}
+
+function generate_vmess_phone_client_config() {
+  local phone_client_file="$phone_client_filename"
+  local server_name_in_config=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+  
+  if [ "$server_name_in_config" != "null" ]; then
+    awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"  
+  else
+    awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  fi
+  mv "$phone_client_file.tmp" "$phone_client_file"
+  echo "手机端配置文件已保存至 $phone_client_file，请下载后使用！"
 }
 
 function generate_Hysteria2_phone_client_config() {
@@ -2393,6 +2586,52 @@ function display_reality_config() {
     done
 }
 
+function display_vmess_config() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local output_file="/usr/local/etc/sing-box/output.txt"
+    local local_ip
+    local_ip=$(get_local_ip)
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local UUIDS=($(jq -r '.inbounds[0].users[].uuid' "$config_file"))
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")    
+    echo -e "${CYAN}Vmess 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"    
+    if [ -n "$server_name" ] && [ "$server_name" != "null" ]; then
+        echo "服务器地址: $server_name"  | tee -a "$output_file"
+    else
+        echo "服务器地址: $local_ip"  | tee -a "$output_file"
+    fi    
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "监听端口: $listen_port"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"    
+    for ((i = 0; i < ${#UUIDS[@]}; i++)); do
+        local uuid="${UUIDS[i]}"
+        echo -e "密码 $i: $uuid"  | tee -a "$output_file"
+    done    
+    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"    
+    if [ -n "$transport_type" ] && [ "$transport_type" != "null" ]; then
+        echo "传输协议: $transport_type"  | tee -a "$output_file"
+        
+        if [ -n "$transport_path" ] && [ "$transport_path" != "null" ]; then
+            echo "路径: $transport_path"  | tee -a "$output_file"
+        fi
+    else
+        echo "传输协议: tcp"  | tee -a "$output_file"
+    fi    
+    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo "配置信息已保存至 $output_file"
+    for ((i = 0; i < ${#UUIDS[@]}; i++)); do
+        local uuid="${UUIDS[i]}" 
+        generate_random_filename
+        write_phone_client_file
+        write_win_client_file
+        generate_vmess_win_client_config
+        generate_vmess_phone_client_config
+    done    
+}
+
 function display_trojan_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"  
@@ -2722,6 +2961,18 @@ function trojan_install() {
     display_trojan_config
 }
 
+function vmess_install() {
+    install_sing_box
+    log_outbound_config    
+    generate_vmess_config
+    modify_format_inbounds_and_outbounds     
+    systemctl daemon-reload   
+    systemctl enable sing-box
+    systemctl start sing-box
+    systemctl restart sing-box
+    display_vmess_config
+}
+
 function wireguard_install() {
     check_wireguard_config
     check_config_file_existence
@@ -2744,15 +2995,15 @@ echo -e "║ ${CYAN}Telegram 群组${NC}: https://t.me/mrxiao758                
 echo -e "║ ${CYAN}YouTube频道${NC}: https://youtube.com/@Mr_xiao502                           ║"
 echo "╠════════════════════════════════════════════════════════════════════════╣"
 echo "║ 请选择要执行的操作：                                                   ║"
-echo -e "║${CYAN} [1]${NC}  Socks                   ${CYAN} [2]${NC}  Direct                              ║"
-echo -e "║${CYAN} [3]${NC}  Vless                   ${CYAN} [4]${NC}  TUIC                                ║"
-echo -e "║${CYAN} [5]${NC}  Juicity                 ${CYAN} [6]${NC}  Trojan                              ║"
-echo -e "║${CYAN} [7]${NC}  Hysteria                ${CYAN} [8]${NC}  Hysteria2                           ║"
-echo -e "║${CYAN} [9]${NC}  ShadowTLS               ${CYAN} [10]${NC} NaiveProxy                          ║"
-echo -e "║${CYAN} [11]${NC} Shadowsocks             ${CYAN} [12]${NC} WireGuard                           ║"
-echo -e "║${CYAN} [13]${NC} 查看节点信息            ${CYAN} [14]${NC} 更新代理工具                        ║"
-echo -e "║${CYAN} [15]${NC} 重启服务                ${CYAN} [16]${NC} 卸载                                ║"
-echo -e "║${CYAN} [0]${NC}  退出                                                              ║"
+echo -e "║${CYAN} [1]${NC}  Socks                         ${CYAN} [2]${NC}   Direct                       ║"
+echo -e "║${CYAN} [3]${NC}  Vmess                         ${CYAN} [4]${NC}   Vless                        ║"
+echo -e "║${CYAN} [5]${NC}  TUIC                          ${CYAN} [6]${NC}   Juicity                      ║"
+echo -e "║${CYAN} [7]${NC}  Trojan                        ${CYAN} [8]${NC}   Hysteria                     ║"
+echo -e "║${CYAN} [9]${NC}  Hysteria2                     ${CYAN} [10]${NC}  ShadowTLS                    ║"
+echo -e "║${CYAN} [11]${NC} NaiveProxy                    ${CYAN} [12]${NC}  Shadowsocks                  ║"
+echo -e "║${CYAN} [13]${NC} WireGuard                     ${CYAN} [14]${NC}  查看节点信息                 ║"
+echo -e "║${CYAN} [15]${NC} 更新代理工具                  ${CYAN} [16]${NC}  重启服务                     ║"
+echo -e "║${CYAN} [17]${NC} 卸载                          ${CYAN} [0]${NC}   退出                         ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
@@ -2764,48 +3015,51 @@ echo "╚═══════════════════════�
             ;;
         2)
             Direct_install
-            ;;            
+            ;;  
         3)
+            vmess_install
+            ;;                      
+        4)
             reality_install
             ;;
-        4)
+        5)
             tuic_install
             ;;
-        5)
+        6)
             juicity_install
             ;;                
-        6)
+        7)
             trojan_install
             ;;
-        7)
+        8)
             Hysteria_install
             ;;
-        8)
+        9)
             Hysteria2_install
             ;;
-        9)
+        10)
             shadowtls_install
             ;; 
-        10)
+        11)
             NaiveProxy_install
             ;;  
-        11)
+        12)
             Shadowsocks_install
             ;;
-        12)
+        13)
             wireguard_install
             ;;                                       
-        13)
+        14)
             view_saved_config
             ;;
 
-        14)
+        15)
             update_proxy_tool
             ;;
-        15)
+        16)
             check_and_restart_services
             ;;             
-        16)
+        17)
             uninstall
             ;;                   
         0)
