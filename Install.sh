@@ -1358,7 +1358,7 @@ function prompt_setup_type() {
     while true; do
         read -p "请选择传输层协议（默认1）：
 1). TCP（trojan+tcp+tls）
-2). ws（trojan+ws+tls+CDN）
+2). ws（trojan+ws+tls）
 3). H2C（trojan+H2C+tls）       
 4). gRPC（trojan+gRPC+tls）
 请选择 [1-4]: " setup_type
