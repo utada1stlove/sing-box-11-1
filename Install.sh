@@ -1029,6 +1029,36 @@ function apply_certificate() {
     set_private_key_path="$private_key_path"
 }
 
+function Reapply_certificates() {
+    local tls_info_file="/usr/local/etc/sing-box/tls_info.json"
+    local has_ipv4=false
+
+    ipv4_address=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
+
+    if [ -n "$ipv4_address" ]; then
+        has_ipv4=true
+    fi
+    if ! command -v acme.sh &>/dev/null; then
+        curl -s https://get.acme.sh | sh -s email=example@gmail.com
+    fi
+    alias acme.sh=~/.acme.sh/acme.sh
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    jq -c '.[]' "$tls_info_file" | while read -r tls_info; do
+        server_name=$(echo "$tls_info" | jq -r '.server_name')
+        key_path=$(echo "$tls_info" | jq -r '.key_path')
+        certificate_path=$(echo "$tls_info" | jq -r '.certificate_path')
+        echo "Requesting certificate for $server_name..."
+        if $has_ipv4; then
+            ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone
+        else
+            ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6
+        fi
+        ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
+        echo "Certificate for $server_name has been applied and installed."
+    done
+    rm -f "$tls_info_file"
+}
+
 function generate_private_key() {
     while true; do
         read -p "请输入私钥 (默认随机生成私钥): " private_key
@@ -1743,6 +1773,11 @@ function prompt_and_generate_transport_config() {
         \"type\": \"grpc\"
       },"
     fi
+}
+
+function extract_tls_info() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    jq '[.inbounds[].tls | {server_name: .server_name, certificate_path: .certificate_path, key_path: .key_path}]' "$config_file" > /usr/local/etc/sing-box/tls_info.json
 }
 
 function extract_variables_and_cleanup() {
@@ -2987,6 +3022,11 @@ function wireguard_install() {
     systemctl restart sing-box
 }
 
+function Update_certificate() {
+    extract_tls_info
+    Reapply_certificates
+} 
+
 function main_menu() {
 echo "╔════════════════════════════════════════════════════════════════════════╗"
 echo -e "║ ${CYAN}作者${NC}： Mr. xiao                                                        ║"
@@ -3003,7 +3043,8 @@ echo -e "║${CYAN} [9]${NC}  Hysteria2                     ${CYAN} [10]${NC}  S
 echo -e "║${CYAN} [11]${NC} NaiveProxy                    ${CYAN} [12]${NC}  Shadowsocks                  ║"
 echo -e "║${CYAN} [13]${NC} WireGuard                     ${CYAN} [14]${NC}  查看节点信息                 ║"
 echo -e "║${CYAN} [15]${NC} 更新代理工具                  ${CYAN} [16]${NC}  重启服务                     ║"
-echo -e "║${CYAN} [17]${NC} 卸载                          ${CYAN} [0]${NC}   退出                         ║"
+echo -e "║${CYAN} [17]${NC} 更新证书                      ${CYAN} [18]${NC}  卸载                         ║"
+echo -e "║${CYAN} [0]${NC}  退出                                                              ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
@@ -3058,8 +3099,11 @@ echo "╚═══════════════════════�
             ;;
         16)
             check_and_restart_services
-            ;;             
+            ;;   
         17)
+            Update_certificate
+            ;;                       
+        18)
             uninstall
             ;;                   
         0)
