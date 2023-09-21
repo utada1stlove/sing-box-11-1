@@ -5,6 +5,9 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
 
+export set_certificate_path="$certificate_path"
+export set_private_key_path="$private_key_path"
+
 function configure_dns64() {
     local ipv4_address
     local ipv6_address
@@ -718,18 +721,6 @@ function generate_uuid() {
     echo "生成的UUID：$uuid"
 }
 
-function generate_transport_config() {
-    if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
-        transport_config=""
-    else
-        generate_transport_type
-        transport_config='      
-      "transport": {
-        "type": "'"$transport_type"'"
-      },'
-    fi
-}
-
 function set_short_id() {
     while true; do
         read -p "请输入 short id (默认随机生成): " short_id
@@ -1003,30 +994,62 @@ function set_certificate_and_private_key() {
 
 function apply_certificate() {
     local domain="$1"
+    local certificate_path="$2"
+    local private_key_path="$3"    
     local has_ipv4=false
+    local ca_servers=("letsencrypt" "zerossl")
+    local local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
 
-    if curl -s4 ifconfig.co &>/dev/null; then
+    if [[ -n "$local_ip_v4" ]]; then
         has_ipv4=true
     fi
     
-    echo "Requesting a certificate..."
-    curl -s https://get.acme.sh | sh -s email=example@gmail.com
+    echo "Requesting a certificate..."        
+    curl -s https://get.acme.sh | sh -s email=example@gmail.com 2>&1 | tail -n 1
     alias acme.sh=~/.acme.sh/acme.sh
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    
+    for ca_server in "${ca_servers[@]}"; do
+        echo "Requesting a certificate from $ca_server..."
+        ~/.acme.sh/acme.sh --set-default-ca --server "$ca_server"
 
-    if $has_ipv4; then
-        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone
-    else
-        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6
-    fi
+        if $has_ipv4; then
+            result=$(~/.acme.sh/acme.sh --issue -d "$domain" --standalone 2>&1)
+        else
+            result=$(~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6 2>&1)
+        fi
 
-    echo "Installing the certificate..."
-    certificate_info=$(
-        ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path" 2>/dev/null
-    )
-    certificate_path=$(echo "$certificate_info" | grep -oP '(?<=Installing key to: ).*(?=\n)|(?<=Installing full chain to: ).*')
-    set_certificate_path="$certificate_path"
-    set_private_key_path="$private_key_path"
+        if [[ $result == *"log"* || $result == *"debug"* ]]; then
+            echo -e "${RED}$result ${NC}"
+        fi        
+
+        if [[ $result == *"force"* ]]; then
+            while true; do
+                read -p "是否要强制更新证书? (Y/N，默认为N): " force_renew
+                force_renew=${force_renew:-"N"}  
+
+                if [[ "$force_renew" == "y" || "$force_renew" == "Y" ]]; then
+                    if $has_ipv4; then
+                        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force >/dev/null 2>&1
+                    else
+                        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force --listen-v6 >/dev/null 2>&1
+                    fi
+                    break
+                elif [[ "$force_renew" == "n" || "$force_renew" == "N" ]]; then
+                    break
+                else
+                    echo -e "${RED}错误：无效输入，请输入 " y/Y " 或 " n/N "！ ${NC}"
+                fi
+            done
+        fi
+
+        if [[ $? -eq 0 ]]; then
+            echo "Installing the certificate..."
+            ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$certificate_path" --fullchain-file "$private_key_path"
+            break 
+        else
+            echo -e "${RED}Failed to obtain a certificate from $ca_server！${NC}"
+        fi
+    done
 }
 
 function Reapply_certificates() {
@@ -1042,19 +1065,23 @@ function Reapply_certificates() {
         curl -s https://get.acme.sh | sh -s email=example@gmail.com
     fi
     alias acme.sh=~/.acme.sh/acme.sh
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-    jq -c '.[]' "$tls_info_file" | while read -r tls_info; do
-        server_name=$(echo "$tls_info" | jq -r '.server_name')
-        key_path=$(echo "$tls_info" | jq -r '.key_path')
-        certificate_path=$(echo "$tls_info" | jq -r '.certificate_path')
-        echo "Requesting certificate for $server_name..."
-        if $has_ipv4; then
-            ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone
-        else
-            ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6
-        fi
-        ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
-        echo "Certificate for $server_name has been applied and installed."
+    ca_servers=("letsencrypt" "zerossl")
+    for ca_server in "${ca_servers[@]}"; do
+        echo "Setting CA server to $ca_server..."
+        ~/.acme.sh/acme.sh --set-default-ca --server "$ca_server"
+        jq -c '.[]' "$tls_info_file" | while read -r tls_info; do
+            server_name=$(echo "$tls_info" | jq -r '.server_name')
+            key_path=$(echo "$tls_info" | jq -r '.key_path')
+            certificate_path=$(echo "$tls_info" | jq -r '.certificate_path')
+            echo "Requesting certificate for $server_name..."
+            if $has_ipv4; then
+                ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone
+            else
+                ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6
+            fi
+            ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
+            echo "Certificate for $server_name has been applied and installed using $ca_server CA."
+        done
     done
     rm -f "$tls_info_file"
 }
@@ -1736,9 +1763,11 @@ function generate_vmess_transport_config() {
     elif [[ $node_type == 1 || $node_type == 4  ]]; then
         transport_config=""
     elif [[ $node_type == 3 || $node_type == 7 ]]; then
+        service_name=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
         transport_config="
       \"transport\": {
-        \"type\": \"grpc\"
+        \"type\": \"grpc\",
+        \"service_name\": \"$service_name\"
       },"
     elif [[ $node_type == 6 ]]; then
         transport_config="
@@ -1758,7 +1787,9 @@ function prompt_and_generate_transport_config() {
         transport_config="
       \"transport\": {
         \"type\": \"ws\",
-        \"path\": \"$transport_path\"
+        \"path\": \"$transport_path\",
+        \"max_early_data\": 2048,
+        \"early_data_header_name\": \"Sec-WebSocket-Protocol\"
       },"
     elif [[ $setup_type == 1 ]]; then
         transport_config=""
@@ -1768,10 +1799,33 @@ function prompt_and_generate_transport_config() {
         \"type\": \"http\"
       },"
     elif [[ $setup_type == 4 ]]; then
+        service_name=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
         transport_config="
       \"transport\": {
-        \"type\": \"grpc\"
+        \"type\": \"grpc\",
+        \"service_name\": \"$service_name\"
       },"
+    fi
+}
+
+function generate_transport_config() {
+    if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
+        transport_config=""
+    else
+        generate_transport_type
+        if [[ "$transport_option" == 1 ]]; then
+            transport_config='      
+      "transport": {
+        "type": "http"
+      },'
+        elif [[ "$transport_option" == 2 ]]; then
+            service_name=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
+            transport_config="
+      \"transport\": {
+        \"type\": \"grpc\",
+        \"service_name\": \"$service_name\"
+      },"
+        fi
     fi
 }
 
@@ -1904,8 +1958,6 @@ function generate_socks_config() {
 
 function generate_naive_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local certificate=""
-    local private_key=""
     local tag_label
     generate_unique_tag      
     listen_port
@@ -1914,8 +1966,6 @@ function generate_naive_config() {
     naive_multiple_users
     get_domain    
     set_certificate_and_private_key
-    certificate_path="$certificate_path"
-    private_key_path="$private_key_path"
     local found_rules=0
     local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -1930,8 +1980,6 @@ function generate_naive_config() {
 
 function generate_tuic_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local certificate=""
-    local private_key=""  
     local tag_label
     generate_unique_tag  
     listen_port
@@ -1942,8 +1990,6 @@ function generate_tuic_config() {
     set_congestion_control
     get_domain
     set_certificate_and_private_key
-    certificate_path="$certificate_path"
-    private_key_path="$private_key_path"
     local found_rules=0
     local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v congestion_control="$congestion_control" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -1958,8 +2004,6 @@ function generate_tuic_config() {
 
 function generate_Hysteria_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local certificate=""
-    local private_key="" 
     local tag_label
     generate_unique_tag    
     listen_port
@@ -1970,8 +2014,6 @@ function generate_Hysteria_config() {
     hysteria_multiple_users 
     get_domain   
     set_certificate_and_private_key
-    certificate_path="$certificate_path"
-    private_key_path="$private_key_path"
     local found_rules=0
     local found_inbounds=0   
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -2011,17 +2053,13 @@ function generate_shadowtls_config() {
 
 function generate_juicity_config() {
     local config_file="/usr/local/etc/juicity/config.json"
-    local users=""
-    local certificate=""
-    local private_key=""   
+    local users="" 
     listen_port
     generate_uuid
     set_password
     users="\"$uuid\": \"$password\""
     get_domain 
     set_certificate_and_private_key
-    certificate_path="$certificate_path"
-    private_key_path="$private_key_path"
     set_congestion_control
 
     echo "{
@@ -2063,8 +2101,6 @@ function generate_reality_config() {
 
 function generate_Hy2_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local certificate=""
-    local private_key=""
     local tag_label
     generate_unique_tag      
     listen_port
@@ -2076,8 +2112,6 @@ function generate_Hy2_config() {
     get_fake_domain
     get_domain   
     set_certificate_and_private_key
-    certificate_path="$certificate_path"
-    private_key_path="$private_key_path"
     local found_rules=0
     local found_inbounds=0      
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v fake_domain="$fake_domain" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -2091,7 +2125,7 @@ function generate_Hy2_config() {
 }
 
 function generate_trojan_config() {
-    local config_file="/usr/local/etc/sing-box/config.json"
+    local config_file="/usr/local/etc/sing-box/config.json"    
     local tag_label
     generate_unique_tag
     prompt_setup_type  
@@ -2100,8 +2134,6 @@ function generate_trojan_config() {
     trojan_multiple_users     
     get_domain 
     set_certificate_and_private_key
-    certificate_path="$certificate_path"
-    private_key_path="$private_key_path"
     prompt_and_generate_transport_config   
     local found_rules=0
     local found_inbounds=0              
