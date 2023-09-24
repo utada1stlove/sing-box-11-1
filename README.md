@@ -4,7 +4,7 @@
 - **脚本支持 warp 解锁 ChatGPT、Netflix、Disney+。**
 - **脚本支持多用户。**
 - **脚本支持多种协议共存。**
-- **脚本支持生成Clash客户端配置文件，需要配合meta内核。**
+- **脚本支持生成Clash客户端配置文件，需要配合Meta内核。**
 - **脚本支持生成sing-box客户端配置文件。**
 - **电脑端使用方法：下载生成的win_client_&&&.json文件====>>V2rayN客户端添加自定义配置服务器====>>地址加载生成的win_client_&&&.json文件====>>Core类型选sing_box====>>Socks端口填1080。**
 - **手机端使用方法：下载生成的phone_client_&&&.json文件====>>手机下载sing-box官方客户端====>>Profiles点击New profile====>>name自己命名====>>Source选择Import====>>点击Import File====>>选择下载的phone_client_&&&.json文件。**
