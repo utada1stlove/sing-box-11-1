@@ -5,8 +5,8 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
 
-export set_certificate_path="$certificate_path"
-export set_private_key_path="$private_key_path"
+certificate_path=""
+private_key_path=""
 
 function configure_dns64() {
     local ipv4_address
@@ -895,7 +895,7 @@ function get_local_ip() {
 
 function get_domain() {
     while true; do
-        read -p "请输入域名： " domain
+        read -p "请输入域名（关闭Cloudflare代理状态）： " domain
 
         local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
         local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
@@ -943,48 +943,48 @@ function get_fake_domain() {
 
 function set_certificate_and_private_key() {
     while true; do
-        read -p "请输入 PEM 证书路径 (默认/etc/ssl/private/cert.crt): " certificate_path
-        certificate_path=${certificate_path:-"/etc/ssl/private/cert.crt"}
+        read -p "请输入 PEM 证书位置: " certificate_path_input
 
-        if [[ "$certificate_path" != "/etc/ssl/private/cert.crt" ]]; then
-            certificate_file=$(basename "$certificate_path")
-            allowed_extensions=("crt" "pem")
-
-            if [[ ! -f "$certificate_path" ]]; then
-                echo -e "${RED}错误：证书文件不存在，请重新输入！${NC}"
-                continue
-            elif [[ ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
-                echo -e "${RED}错误：不支持的证书格式，请配置.crt或.pem格式的证书文件！${NC}"
-                continue
-            fi
+        if [[ ! -f "$certificate_path_input" ]]; then
+            echo -e "${RED}错误：证书文件不存在，请重新输入！${NC}"
+            continue
         fi
+
+        certificate_file=$(basename "$certificate_path_input")
+        allowed_extensions=("crt" "pem")
+        if [[ ! "${allowed_extensions[@]}" =~ "${certificate_file##*.}" ]]; then
+            echo -e "${RED}错误：不支持的证书格式，请配置.crt或.pem格式的证书文件！${NC}"
+            continue
+        fi
+
+        certificate_path="$certificate_path_input" 
         break
     done
 
     while true; do
-        read -p "请输入 PEM 私钥路径 (默认/etc/ssl/private/private.key): " private_key_path
-        private_key_path=${private_key_path:-"/etc/ssl/private/private.key"}
+        read -p "请输入 PEM 私钥位置: " private_key_path_input
 
-        if [[ "$private_key_path" != "/etc/ssl/private/private.key" ]]; then
-            private_key_file=$(basename "$private_key_path")
-            allowed_extensions=("key" "pem")
-
-            if [[ ! -f "$private_key_path" ]]; then
-                echo -e "${RED}错误：私钥文件不存在，请重新输入！${NC}"
-                continue
-            elif [[ ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
-                echo -e "${RED}错误：不支持的私钥格式，请配置.key或.pem格式的私钥文件！${NC}"
-                continue
-            fi
+        if [[ ! -f "$private_key_path_input" ]]; then
+            echo -e "${RED}错误：私钥文件不存在，请重新输入！${NC}"
+            continue
         fi
+
+        private_key_file=$(basename "$private_key_path_input")
+        allowed_extensions=("key" "pem")
+        if [[ ! "${allowed_extensions[@]}" =~ "${private_key_file##*.}" ]]; then
+            echo -e "${RED}错误：不支持的私钥格式，请配置.key或.pem格式的私钥文件！${NC}"
+            continue
+        fi
+
+        private_key_path="$private_key_path_input"  
         break
     done
 }
 
 function apply_certificate() {
-    local domain="$1"
-    local certificate_path="$2"
-    local private_key_path="$3"    
+    local domain="$1" 
+    certificate_path="/etc/ssl/private/"$domain".crt"
+    private_key_path="/etc/ssl/private/"$domain".key"
     local has_ipv4=false
     local ca_servers=("letsencrypt" "zerossl")
     local local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
@@ -1012,28 +1012,16 @@ function apply_certificate() {
         fi        
 
         if [[ $result == *"force"* ]]; then
-            while true; do
-                read -p "是否要强制更新证书? (Y/N，默认为N): " force_renew
-                force_renew=${force_renew:-"N"}  
-
-                if [[ "$force_renew" == "y" || "$force_renew" == "Y" ]]; then
-                    if $has_ipv4; then
-                        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force >/dev/null 2>&1
-                    else
-                        ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force --listen-v6 >/dev/null 2>&1
-                    fi
-                    break
-                elif [[ "$force_renew" == "n" || "$force_renew" == "N" ]]; then
-                    break
-                else
-                    echo -e "${RED}错误：无效输入，请输入 " y/Y " 或 " n/N "！ ${NC}"
-                fi
-            done
-        fi
+            if $has_ipv4; then
+                ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force >/dev/null 2>&1
+            else
+                ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force --listen-v6 >/dev/null 2>&1
+            fi
+        fi        
 
         if [[ $? -eq 0 ]]; then
             echo "Installing the certificate..."
-            ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$certificate_path" --fullchain-file "$private_key_path"
+            ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path"
             break 
         else
             echo -e "${RED}Failed to obtain a certificate from $ca_server！${NC}"
@@ -1317,22 +1305,25 @@ function set_congestion_control() {
 
 function ask_certificate_option() {
     while true; do
-        read -p "请选择证书来源：
+        read -p "请选择证书来源 (默认1)：
 1). 自动申请证书
 2). 自备证书
 请选择[1-2]: " certificate_option
+        certificate_option=${certificate_option:-1}
 
         case $certificate_option in
             1)
                 echo "You have chosen to automatically request a certificate."
-                apply_certificate "$domain" "$private_key_path" "$certificate_path"
+                check_firewall_configuration
+                apply_certificate "$domain"
                 break
                 ;;
             2)
                 echo "You have chosen to use your own certificate."
+                check_firewall_configuration
+                set_certificate_and_private_key
                 break
                 ;;
-
             *)
                 echo -e "${RED}错误：无效的选择，请重新输入！${NC}"
                 ;;
@@ -1379,9 +1370,6 @@ function generate_tls_config() {
     if [ "$node_type" -ge 4 ] && [ "$node_type" -le 7 ]; then
         tls_enabled=true
         get_domain
-        set_certificate_and_private_key
-        certificate_path="$certificate_path"
-        private_key_path="$private_key_path"
         ask_certificate_option                
     else
         tls_enabled=false
@@ -1837,7 +1825,6 @@ function extract_variables_and_cleanup() {
 
 function log_outbound_config() {
   local config_file="/usr/local/etc/sing-box/config.json"
-
   if ! grep -q '"log": {' "$config_file" || ! grep -q '"route": {' "$config_file"  || ! grep -q '"inbounds": \[' "$config_file" || ! grep -q '"outbounds": \[' "$config_file"; then
     echo -e '{\n  "log": {\n  },\n  "route": {\n  },\n  "inbounds": [\n  ],\n  "outbounds": [\n  ]\n}' > "$config_file"
     sed -i '/"log": {/!b;n;c\    "disabled": false,\n    "level": "info",\n    "timestamp": true\n  },' "$config_file"
@@ -1910,9 +1897,9 @@ function generate_vmess_config() {
     generate_uuid
     vmess_multiple_users     
     generate_vmess_transport_config
-    check_firewall_configuration
     generate_tls_config
-
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"     
     local found_rules=0
     local found_inbounds=0              
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v transport_config="$transport_config" -v tls_config="$tls_config" '
@@ -1954,7 +1941,9 @@ function generate_naive_config() {
     set_password    
     naive_multiple_users
     get_domain    
-    set_certificate_and_private_key
+    ask_certificate_option
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"  
     local found_rules=0
     local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -1978,7 +1967,9 @@ function generate_tuic_config() {
     tuic_multiple_users    
     set_congestion_control
     get_domain
-    set_certificate_and_private_key
+    ask_certificate_option
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"   
     local found_rules=0
     local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v congestion_control="$congestion_control" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -2002,7 +1993,9 @@ function generate_Hysteria_config() {
     set_password    
     hysteria_multiple_users 
     get_domain   
-    set_certificate_and_private_key
+    ask_certificate_option
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"
     local found_rules=0
     local found_inbounds=0   
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -2047,9 +2040,11 @@ function generate_juicity_config() {
     generate_uuid
     set_password
     users="\"$uuid\": \"$password\""
-    get_domain 
-    set_certificate_and_private_key
     set_congestion_control
+    get_domain 
+    ask_certificate_option
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"
 
     echo "{
     \"listen\": \":$listen_port\",
@@ -2100,7 +2095,9 @@ function generate_Hy2_config() {
     hy2_multiple_users
     get_fake_domain
     get_domain   
-    set_certificate_and_private_key
+    ask_certificate_option
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"
     local found_rules=0
     local found_inbounds=0      
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v users="$users" -v fake_domain="$fake_domain" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" '
@@ -2122,7 +2119,9 @@ function generate_trojan_config() {
     set_password
     trojan_multiple_users     
     get_domain 
-    set_certificate_and_private_key
+    ask_certificate_option
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"
     prompt_and_generate_transport_config   
     local found_rules=0
     local found_inbounds=0              
@@ -3501,8 +3500,6 @@ function juicity_install() {
     create_ssl_folder   
     install_latest_juicity
     generate_juicity_config
-    check_firewall_configuration 
-    ask_certificate_option
     configure_juicity_service
     systemctl daemon-reload
     systemctl enable juicity.service
@@ -3562,8 +3559,6 @@ function NaiveProxy_install() {
     log_outbound_config        
     generate_naive_config
     modify_format_inbounds_and_outbounds    
-    check_firewall_configuration   
-    ask_certificate_option 
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -3577,8 +3572,6 @@ function tuic_install() {
     log_outbound_config    
     generate_tuic_config
     modify_format_inbounds_and_outbounds    
-    check_firewall_configuration 
-    ask_certificate_option
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -3592,8 +3585,6 @@ function Hysteria_install() {
     log_outbound_config    
     generate_Hysteria_config
     modify_format_inbounds_and_outbounds    
-    check_firewall_configuration 
-    ask_certificate_option 
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -3635,8 +3626,6 @@ function Hysteria2_install() {
     log_outbound_config    
     generate_Hy2_config
     modify_format_inbounds_and_outbounds    
-    check_firewall_configuration 
-    ask_certificate_option 
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
@@ -3649,9 +3638,7 @@ function trojan_install() {
     install_sing_box 
     log_outbound_config
     generate_trojan_config 
-    modify_format_inbounds_and_outbounds                          
-    check_firewall_configuration
-    ask_certificate_option     
+    modify_format_inbounds_and_outbounds                              
     systemctl daemon-reload      
     systemctl enable sing-box 
     systemctl start sing-box
