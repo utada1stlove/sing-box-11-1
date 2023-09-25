@@ -1899,7 +1899,8 @@ function generate_vmess_config() {
     generate_vmess_transport_config
     generate_tls_config
     local cert_path="$certificate_path"
-    local key_path="$private_key_path"     
+    local key_path="$private_key_path" 
+    check_firewall_configuration
     local found_rules=0
     local found_inbounds=0              
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v transport_config="$transport_config" -v tls_config="$tls_config" '
