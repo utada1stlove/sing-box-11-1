@@ -79,7 +79,6 @@ function check_firewall_configuration() {
             echo "Firewall configuration has been updated."
             ;;
         iptables | iptables-persistent | iptables-service)
-            # IPv4 rules
             if ! iptables -C INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
                 iptables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT > /dev/null 2>&1
             fi
@@ -112,7 +111,6 @@ function check_firewall_configuration() {
                 iptables -A INPUT -p udp --dport 80 -j ACCEPT > /dev/null 2>&1
             fi
 
-            # IPv6 rules
             if ! ip6tables -C INPUT -p tcp --dport "$listen_port" -j ACCEPT >/dev/null 2>&1; then
                 ip6tables -A INPUT -p tcp --dport "$listen_port" -j ACCEPT > /dev/null 2>&1
             fi
@@ -268,23 +266,6 @@ function check_config_file_existence() {
      echo -e "${RED}sing-box 配置文件不存在，请先搭建节点！${NC}"
       exit 1
     fi
-}
-
-function generate_random_filename() {
-    local dir="/usr/local/etc/sing-box"
-    local filename=""    
-    while true; do
-        random_value=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 5 | head -n 1)        
-        win_filename="win_client_${random_value}.json"
-        phone_filename="phone_client_${random_value}.json"        
-        if [ ! -e "${dir}/${win_filename}" ] && [ ! -e "${dir}/${phone_filename}" ]; then
-            touch "${dir}/${win_filename}"
-            touch "${dir}/${phone_filename}"
-            win_client_filename="${dir}/${win_filename}"
-            phone_client_filename="${dir}/${phone_filename}"
-            break
-        fi
-    done
 }
 
 function generate_naive_random_filename() {
@@ -2194,20 +2175,27 @@ function update_outbound_file() {
 }
 
 function write_phone_client_file() {
-    local phone_client_file="$phone_client_filename"
-    awk -v phone_client_file="$phone_client_file" 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"proxy\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"remote\","; print "        \"address\": \"fakeip\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"query_type\": ["; print "          \"A\","; print "          \"AAAA\""; print "        ],"; print "        \"server\": \"remote\""; print "      }"; print "    ],"; print "    \"fakeip\": {"; print "      \"enabled\": true,"; print "      \"inet4_range\": \"198.18.0.0/15\","; print "      \"inet6_range\": \"fc00::/18\""; print "    },"; print "    \"strategy\": \"prefer_ipv4\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"tun\","; print "      \"tag\": \"tun-in\","; print "      \"inet4_address\": \"172.19.0.1/30\","; print "      \"inet6_address\": \"fdfe:dcba:9876::1/126\","; print "      \"mtu\": 9000,"; print "      \"auto_route\": true,"; print "      \"strict_route\": true,"; print "      \"stack\": \"gvisor\","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "$phone_client_file"    
+  local dir="/usr/local/etc/sing-box"
+  local phone_client="${dir}/phone_client.json"
+  if [ ! -s "${phone_client}" ]; then
+    awk 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"auto\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      }"; print "    ],"; print "    \"strategy\": \"prefer_ipv4\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"tun\","; print "      \"tag\": \"tun-in\","; print "      \"inet4_address\": \"172.19.0.1/30\","; print "      \"inet6_address\": \"fdfe:dcba:9876::1/126\","; print "      \"mtu\": 9000,"; print "      \"auto_route\": true,"; print "      \"strict_route\": true,"; print "      \"stack\": \"gvisor\","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"urltest\","; print "      \"tag\": \"auto\","; print "      \"outbounds\": ["; print "      ],"; print "      \"url\": \"https://www.gstatic.com/generate_204\","; print "      \"interval\": \"1m\","; print "      \"tolerance\": 50,"; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"selector\","; print "      \"tag\": \"select\","; print "      \"outbounds\": ["; print "        \"auto\""; print "      ],"; print "      \"default\": \"auto\","; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "${phone_client}"
+  fi    
 }
 
 function write_win_client_file() {
-    local win_client_file="$win_client_filename"
-    awk -v win_client_file="$win_client_file" 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"proxy\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"remote\","; print "        \"address\": \"fakeip\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"query_type\": ["; print "          \"A\","; print "          \"AAAA\""; print "        ],"; print "        \"server\": \"remote\""; print "      }"; print "    ],"; print "    \"fakeip\": {"; print "      \"enabled\": true,"; print "      \"inet4_range\": \"198.18.0.0/15\","; print "      \"inet6_range\": \"fc00::/18\""; print "    },"; print "    \"strategy\": \"prefer_ipv4\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"mixed\","; print "      \"tag\": \"mixed-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": 1080,"; print "      \"sniff\": true,"; print "      \"set_system_proxy\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "$win_client_file"
+  local dir="/usr/local/etc/sing-box"
+  local win_client="${dir}/win_client.json"
+  if [ ! -s "${win_client}" ]; then
+    awk 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"auto\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      }"; print "    ],"; print "    \"strategy\": \"prefer_ipv4\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"mixed\","; print "      \"tag\": \"mixed-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": 1080,"; print "      \"sniff\": true,"; print "      \"set_system_proxy\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"urltest\","; print "      \"tag\": \"auto\","; print "      \"outbounds\": ["; print "      ],"; print "      \"url\": \"https://www.gstatic.com/generate_204\","; print "      \"interval\": \"1m\","; print "      \"tolerance\": 50,"; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"selector\","; print "      \"tag\": \"select\","; print "      \"outbounds\": ["; print "        \"auto\""; print "      ],"; print "      \"default\": \"auto\","; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "${win_client}"
+  fi    
 }
 
 function write_clash_yaml() {
   local dir="/usr/local/etc/sing-box"
   local clash_yaml="${dir}/clash.yaml"
+  local api_pass=$(head /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16) 
   if [ ! -s "${clash_yaml}" ]; then
-    awk 'BEGIN { print "mixed-port: 10801"; print "redir-port: 7892"; print "tproxy-port: 7893"; print "allow-lan: true"; print "bind-address: \"*\""; print "find-process-mode: strict"; print "mode: rule"; print "geox-url:"; print "  geoip: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat\""; print "  geosite: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat\""; print "  mmdb: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb\""; print "log-level: debug"; print "ipv6: true"; print "external-controller: 0.0.0.0:9093"; print "secret: \"123456\""; print "tcp-concurrent: true"; print "interface-name: en0"; print "global-client-fingerprint: chrome"; print "profile:"; print "  store-selected: false"; print "  store-fake-ip: true"; print "tun:"; print "  enable: true"; print "  stack: system"; print "  dns-hijack:"; print "    - 0.0.0.0:53"; print "  auto-detect-interface: true"; print "  auto-route: false"; print "  mtu: 9000"; print "  strict-route: true"; print "ebpf:"; print "  auto-redir:"; print "    - eth0"; print "  redirect-to-tun:"; print "    - eth0"; print "sniffer:"; print "  enable: true"; print "  override-destination: false"; print "  sniff:"; print "    TLS:"; print "      ports: [443, 8443]"; print "    HTTP:"; print "      ports: [80, 8080-8880]"; print "      override-destination: true"; print "  force-domain:"; print "    - +.v2ex.com"; print "tunnels:"; print "  - tcp/udp,127.0.0.1:6553,114.114.114.114:53,Proxy"; print "  - network: [tcp, udp]"; print "    address: 127.0.0.1:7777"; print "    target: target.com"; print "    proxy: Proxy"; print "dns:"; print "  enable: true"; print "  prefer-h3: true"; print "  listen: 0.0.0.0:53"; print "  ipv6: true"; print "  ipv6-timeout: 300"; print "  default-nameserver:"; print "    - 114.114.114.114"; print "    - 8.8.8.8"; print "    - tls://1.12.12.12:853"; print "    - tls://223.5.5.5:853"; print "    - system"; print "  enhanced-mode: fake-ip"; print "  fake-ip-range: 198.18.0.1/16"; print "  nameserver:"; print "    - https://dns.alidns.com/dns-query"; print "    - https://223.5.5.5/dns-query"; print "    - https://doh.pub/dns-query"; print "    - https://dns.alidns.com/dns-query#h3=true"; print "    - quic://dns.adguard.com:784"; print "  fallback:"; print "    - tls://dns.google"; print "    - https://1.1.1.1/dns-query"; print "    - https://cloudflare-dns.com/dns-query"; print "    - https://dns.google/dns-query"; print "  fallback-filter:"; print "    geoip: true"; print "    geoip-code: CN"; print "    geosite:"; print "      - gfw"; print "    ipcidr:"; print "      - 240.0.0.0/4"; print "    domain:"; print "      - \"+.google.com\""; print "      - \"+.facebook.com\""; print "      - \"+.youtube.com\""; print "  nameserver-policy:"; print "    \"geosite:cn,private,apple\":"; print "      - https://doh.pub/dns-query"; print "      - https://dns.alidns.com/dns-query"; print "    \"geosite:category-ads-all\": rcode://success"; print "    \"www.baidu.com,+.google.cn\": [223.5.5.5, https://dns.alidns.com/dns-query]"; print "proxies:"; print "proxy-groups:"; print "  - name: Proxy"; print "    type: select"; print "    proxies:"; print "      - auto"; print "  - name: auto"; print "    type: url-test"; print "    proxies:"; print "    url: \"https://cp.cloudflare.com/generate_204\""; print "    interval: 300"; print "rule-providers:"; print "  reject:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt\""; print "    path: ./ruleset/reject.yaml"; print "    interval: 86400"; print "  icloud:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/icloud.txt\""; print "    path: ./ruleset/icloud.yaml"; print "    interval: 86400"; print "  apple:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt\""; print "    path: ./ruleset/apple.yaml"; print "    interval: 86400"; print "  direct:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt\""; print "    path: ./ruleset/direct.yaml"; print "    interval: 86400"; print "  private:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt\""; print "    path: ./ruleset/private.yaml"; print "    interval: 86400"; print "  gfw:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt\""; print "    path: ./ruleset/gfw.yaml"; print "    interval: 86400"; print "  tld-not-cn:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/tld-not-cn.txt\""; print "    path: ./ruleset/tld-not-cn.yaml"; print "    interval: 86400"; print "  cncidr:"; print "    type: http"; print "    behavior: ipcidr"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt\""; print "    path: ./ruleset/cncidr.yaml"; print "    interval: 86400"; print "  lancidr:"; print "    type: http"; print "    behavior: ipcidr"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt\""; print "    path: ./ruleset/lancidr.yaml"; print "    interval: 86400"; print "  applications:"; print "    type: http"; print "    behavior: classical"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/applications.txt\""; print "    path: ./ruleset/applications.yaml"; print "    interval: 86400"; print "rules:"; print "  - RULE-SET,applications,DIRECT"; print "  - DOMAIN,clash.razord.top,DIRECT"; print "  - DOMAIN,yacd.haishan.me,DIRECT"; print "  - DOMAIN-SUFFIX,services.googleapis.cn,DIRECT"; print "  - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,DIRECT"; print "  - RULE-SET,private,DIRECT"; print "  - RULE-SET,reject,REJECT"; print "  - RULE-SET,icloud,DIRECT"; print "  - RULE-SET,apple,DIRECT"; print "  - RULE-SET,direct,DIRECT"; print "  - RULE-SET,lancidr,DIRECT"; print "  - RULE-SET,cncidr,DIRECT"; print "  - GEOIP,LAN,DIRECT"; print "  - GEOIP,CN,DIRECT"; print "  - MATCH,Proxy"; }' > "${clash_yaml}"
+    awk -v api_pass="$api_pass" 'BEGIN { print "mixed-port: 10801"; print "redir-port: 7892"; print "tproxy-port: 7893"; print "allow-lan: true"; print "bind-address: \"*\""; print "find-process-mode: strict"; print "mode: rule"; print "geox-url:"; print "  geoip: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat\""; print "  geosite: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat\""; print "  mmdb: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb\""; print "log-level: debug"; print "ipv6: true"; print "external-controller: 0.0.0.0:9093"; print "secret: \"" api_pass "\""; print "tcp-concurrent: true"; print "interface-name: en0"; print "global-client-fingerprint: chrome"; print "profile:"; print "  store-selected: false"; print "  store-fake-ip: true"; print "tun:"; print "  enable: true"; print "  stack: system"; print "  dns-hijack:"; print "    - 0.0.0.0:53"; print "  auto-detect-interface: true"; print "  auto-route: false"; print "  mtu: 9000"; print "  strict-route: true"; print "ebpf:"; print "  auto-redir:"; print "    - eth0"; print "  redirect-to-tun:"; print "    - eth0"; print "sniffer:"; print "  enable: true"; print "  override-destination: false"; print "  sniff:"; print "    TLS:"; print "      ports: [443, 8443]"; print "    HTTP:"; print "      ports: [80, 8080-8880]"; print "      override-destination: true"; print "  force-domain:"; print "    - +.v2ex.com"; print "tunnels:"; print "  - tcp/udp,127.0.0.1:6553,114.114.114.114:53,Proxy"; print "  - network: [tcp, udp]"; print "    address: 127.0.0.1:7777"; print "    target: target.com"; print "    proxy: Proxy"; print "dns:"; print "  enable: true"; print "  prefer-h3: true"; print "  listen: 0.0.0.0:53"; print "  ipv6: true"; print "  ipv6-timeout: 300"; print "  default-nameserver:"; print "    - 114.114.114.114"; print "    - 8.8.8.8"; print "    - tls://1.12.12.12:853"; print "    - tls://223.5.5.5:853"; print "    - system"; print "  enhanced-mode: fake-ip"; print "  fake-ip-range: 198.18.0.1/16"; print "  nameserver:"; print "    - https://dns.alidns.com/dns-query"; print "    - https://223.5.5.5/dns-query"; print "    - https://doh.pub/dns-query"; print "    - https://dns.alidns.com/dns-query#h3=true"; print "    - quic://dns.adguard.com:784"; print "  fallback:"; print "    - tls://dns.google"; print "    - https://1.1.1.1/dns-query"; print "    - https://cloudflare-dns.com/dns-query"; print "    - https://dns.google/dns-query"; print "  fallback-filter:"; print "    geoip: true"; print "    geoip-code: CN"; print "    geosite:"; print "      - gfw"; print "    ipcidr:"; print "      - 240.0.0.0/4"; print "    domain:"; print "      - \"+.google.com\""; print "      - \"+.facebook.com\""; print "      - \"+.youtube.com\""; print "  nameserver-policy:"; print "    \"geosite:cn,private,apple\":"; print "      - https://doh.pub/dns-query"; print "      - https://dns.alidns.com/dns-query"; print "    \"geosite:category-ads-all\": rcode://success"; print "    \"www.baidu.com,+.google.cn\": [223.5.5.5, https://dns.alidns.com/dns-query]"; print "proxies:"; print "proxy-groups:"; print "  - name: Proxy"; print "    type: select"; print "    proxies:"; print "      - auto"; print "  - name: auto"; print "    type: url-test"; print "    proxies:"; print "    url: \"https://cp.cloudflare.com/generate_204\""; print "    interval: 300"; print "rule-providers:"; print "  reject:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt\""; print "    path: ./ruleset/reject.yaml"; print "    interval: 86400"; print "  icloud:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/icloud.txt\""; print "    path: ./ruleset/icloud.yaml"; print "    interval: 86400"; print "  apple:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt\""; print "    path: ./ruleset/apple.yaml"; print "    interval: 86400"; print "  direct:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt\""; print "    path: ./ruleset/direct.yaml"; print "    interval: 86400"; print "  private:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt\""; print "    path: ./ruleset/private.yaml"; print "    interval: 86400"; print "  gfw:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt\""; print "    path: ./ruleset/gfw.yaml"; print "    interval: 86400"; print "  tld-not-cn:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/tld-not-cn.txt\""; print "    path: ./ruleset/tld-not-cn.yaml"; print "    interval: 86400"; print "  cncidr:"; print "    type: http"; print "    behavior: ipcidr"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt\""; print "    path: ./ruleset/cncidr.yaml"; print "    interval: 86400"; print "  lancidr:"; print "    type: http"; print "    behavior: ipcidr"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt\""; print "    path: ./ruleset/lancidr.yaml"; print "    interval: 86400"; print "  applications:"; print "    type: http"; print "    behavior: classical"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/applications.txt\""; print "    path: ./ruleset/applications.yaml"; print "    interval: 86400"; print "rules:"; print "  - RULE-SET,applications,DIRECT"; print "  - DOMAIN,clash.razord.top,DIRECT"; print "  - DOMAIN,yacd.haishan.me,DIRECT"; print "  - DOMAIN-SUFFIX,services.googleapis.cn,DIRECT"; print "  - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,DIRECT"; print "  - RULE-SET,private,DIRECT"; print "  - RULE-SET,reject,REJECT"; print "  - RULE-SET,icloud,DIRECT"; print "  - RULE-SET,apple,DIRECT"; print "  - RULE-SET,direct,DIRECT"; print "  - RULE-SET,lancidr,DIRECT"; print "  - RULE-SET,cncidr,DIRECT"; print "  - GEOIP,LAN,DIRECT"; print "  - GEOIP,CN,DIRECT"; print "  - MATCH,Proxy"; }' > "${clash_yaml}"
     sed -i'' -e '/^      - "+\.google\.com"/s/"/'\''/g' "${clash_yaml}"
     sed -i'' -e '/^      - "+\.facebook\.com"/s/"/'\''/g' "${clash_yaml}"
     sed -i'' -e '/^      - "+\.youtube\.com"/s/"/'\''/g' "${clash_yaml}" 
@@ -2220,19 +2208,37 @@ function write_naive_client_file() {
 }
 
 function generate_shadowsocks_win_client_config() {
-  local win_client_file="$win_client_filename"  
-  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"method\": \"" ss_method "\", "; print "      \"password\": \"" ss_password "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"protocol\": \"smux\","; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4,"; print "        \"max_streams\": 0"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="socks-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"method\": \"" ss_method "\", "; print "      \"password\": \"" ss_password "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"protocol\": \"smux\","; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4,"; print "        \"max_streams\": 0"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
 function generate_shadowsocks_phone_client_config() {
-  local phone_client_file="$phone_client_filename"  
-  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"method\": \"" ss_method "\", "; print "      \"password\": \"" ss_password "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"protocol\": \"smux\","; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4,"; print "        \"max_streams\": 0"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="ss-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done 
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v ss_method="$ss_method" -v ss_password="$ss_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"method\": \"" ss_method "\", "; print "      \"password\": \"" ss_password "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"protocol\": \"smux\","; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4,"; print "        \"max_streams\": 0"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
 }
 
 function generate_shadowsocks_yaml() {
@@ -2248,19 +2254,37 @@ function generate_shadowsocks_yaml() {
 }
 
 function generate_tuic_phone_client_config() {
-  local phone_client_file="$phone_client_filename"  
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="tuic-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
 }
 
 function generate_tuic_win_client_config() {
-  local win_client_file="$win_client_filename"  
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="tuic-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
 function generate_tuic_yaml() {
@@ -2276,19 +2300,39 @@ function generate_tuic_yaml() {
 }
 
 function generate_socks_win_client_config() {
-  local win_client_file="$win_client_filename"  
-  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="socks-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done
+  
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";}
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
+    {print}' "$win_client_file" > "$win_client_file.tmp"    
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
 function generate_socks_phone_client_config() {
-  local phone_client_file="$phone_client_filename"  
-  awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="socks-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done
+  
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";}
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
+    {print}' "$phone_client_file" > "$phone_client_file.tmp" 
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
 }
 
 function generate_socks_yaml() {
@@ -2304,19 +2348,37 @@ function generate_socks_yaml() {
 }
 
 function generate_Hysteria_win_client_config() {
-  local win_client_file="$win_client_filename"  
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="Hysteria-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done  
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
 function generate_Hysteria_phone_client_config() {
-  local phone_client_file="$phone_client_filename"  
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="Hysteria-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
 }
 
 function generate_Hysteria_yaml() {
@@ -2332,33 +2394,55 @@ function generate_Hysteria_yaml() {
 }
 
 function generate_vmess_win_client_config() {
-  local win_client_file="$win_client_filename"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
   local server_name_in_config=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+
+  while true; do
+    proxy_name="vmess-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done  
   
   if [ "$server_name_in_config" != "null" ]; then
-    awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"  
+    awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
+    {print}' "$win_client_file" > "$win_client_file.tmp"
   else
-    awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+    awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
+    {print}' "$win_client_file" > "$win_client_file.tmp"       
   fi
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至 $win_client_file，请下载后使用！"
 }
 
 function generate_vmess_phone_client_config() {
-  local phone_client_file="$phone_client_filename"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
   local server_name_in_config=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+
+  while true; do
+    proxy_name="vmess-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done 
   
   if [ "$server_name_in_config" != "null" ]; then
-    awk -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"  
+    awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";}       
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }     
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"  
   else
-    awk -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+    awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }      
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"
   fi
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至 $phone_client_file，请下载后使用！"
 }
 
 function generate_vmess_tcp_yaml() {
@@ -2434,19 +2518,37 @@ function generate_vmess_grpc_tls_yaml() {
 }
 
 function generate_Hysteria2_phone_client_config() {
-  local phone_client_file="$phone_client_filename"  
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="Hysteria2-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done  
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+   /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
 }
 
 function generate_Hysteria2_win_client_config() {
-  local win_client_file="$win_client_filename"  
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="Hysteria2-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done  
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
 function generate_Hysteria2_yaml() {
@@ -2462,19 +2564,37 @@ function generate_Hysteria2_yaml() {
 }
 
 function generate_vless_win_client_config() {
-  local win_client_file="$win_client_filename" 
-  awk -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"  
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="vless-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"  
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至 $win_client_file，请下载后使用！"
 }
 
 function generate_vless_phone_client_config() {
-  local phone_client_file="$phone_client_filename"
-  awk -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"  
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="vless-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"  
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至 $phone_client_file，请下载后使用！"
 }
 
 function generate_vless_reality_vision_yaml() {
@@ -2502,19 +2622,37 @@ function generate_vless_reality_grpc_yaml() {
 }
 
 function generate_trojan_phone_client_config() {
-  local phone_client_file="$phone_client_filename" 
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_config="$transport_config" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"  
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="trojan-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$phone_client_file"; then
+      break
+    fi
+  done
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} 
+   /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"  
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至 $phone_client_file，请下载后使用！"
 }
 
 function generate_trojan_win_client_config() {
-  local win_client_file="$win_client_filename"
-  awk -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_config="$transport_config" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"proxy\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"  
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  
+  while true; do
+    proxy_name="trojan-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    if ! grep -q "name: $proxy_name" "$win_client_file"; then
+      break
+    fi
+  done
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"  
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至 $win_client_file，请下载后使用！"
 }
 
 function generate_trojan_tcp_yaml() {
@@ -2554,19 +2692,41 @@ function generate_trojan_grpc_yaml() {
 }
 
 function generate_shadowtls_win_client_config() {
-  local win_client_file="$win_client_filename"  
-  awk -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"st-out\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"proxy\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"proxy\", "; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} {print}' "$win_client_file" > "$win_client_file.tmp"
+  local win_client_file="/usr/local/etc/sing-box/win_client.json"
+  local proxy_name
+  local shadowtls_out
+  
+while true; do
+  proxy_name="shadowtls-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+  shadowtls_out="stl-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+  if ! grep -q "name: $proxy_name" "$win_client_file" && ! grep -q "name: $shadowtls_out" "$win_client_file" && [ "$proxy_name" != "$shadowtls_out" ]; then
+    break
+  fi
+done
+  awk -v shadowtls_out="$shadowtls_out" -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"" shadowtls_out "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" shadowtls_out "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
-  echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
 }
 
 function generate_shadowtls_phone_client_config() {
-  local phone_client_file="$phone_client_filename"  
-  awk -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
-    /"outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"st-out\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"proxy\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"proxy\", "; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} {print}' "$phone_client_file" > "$phone_client_file.tmp"
+  local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
+  local proxy_name
+  local shadowtls_out
+    
+  while true; do
+    proxy_name="shadowtls-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    shadowtls_out="stl-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+  if ! grep -q "name: $proxy_name" "$phone_client_file" && ! grep -q "name: $shadowtls_out" "$phone_client_file" && [ "$proxy_name" != "$shadowtls_out" ]; then
+      break
+    fi
+  done 
+  awk -v shadowtls_out="$shadowtls_out" -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"" shadowtls_out "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" shadowtls_out "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} 
+    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
+    {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
-  echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
 }
 
 function generate_shadowtls_yaml() {
@@ -2594,7 +2754,7 @@ function generate_naive_win_client_config() {
     echo "电脑端配置文件已保存至$naive_client_file，请下载后使用！"
 }
 
-function display_NaiveProxy_config() {
+function display_naive_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt" 
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
@@ -2611,6 +2771,14 @@ function display_NaiveProxy_config() {
     echo "$users"  | tee -a "$output_file" 
     echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file" 
+}
+
+function generate_naive_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local naive_client_file="$naive_client_filename"  
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                                \(.password)"' "$config_file")   
     IFS=$'\n'
     for user_info in $users; do
         local username=$(echo "$user_info" | awk '{print $1}')
@@ -2640,8 +2808,7 @@ function display_Direct_config() {
     echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "目标端口: $override_port" | tee -a "$output_file"
     echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file" 
-       
+    echo "配置信息已保存至 $output_file"        
 }
 
 function display_juicity_config() {
@@ -2662,10 +2829,9 @@ function display_juicity_config() {
     echo "配置信息已保存至 $output_file"    
 }
 
-function display_tuic_config() {
+function display_tuic_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt" 
-    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local output_file="/usr/local/etc/sing-box/output.txt"   
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")     
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local users=$(jq -r '.inbounds[0].users[] | "\(.name)     \(.uuid)     \(.password)"' "$config_file")
@@ -2688,12 +2854,23 @@ function display_tuic_config() {
     echo "ALPN: $alpn"  | tee -a "$output_file"     
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
     echo "配置信息已保存至 $output_file" 
+}
+
+function display_tuic_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"     
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")     
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local users=$(jq -r '.inbounds[0].users[] | "\(.name)     \(.uuid)     \(.password)"' "$config_file")
+    local congestion_control=$(jq -r '.inbounds[0].congestion_control' "$config_file")
+    local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")    
     local IFS=$'\n'
     local user_array=($(echo "$users"))
     unset IFS
     for user_info in "${user_array[@]}"; do
         IFS=' ' read -r username uuid password <<< "$user_info"
-        generate_random_filename
         write_phone_client_file
         write_win_client_file        
         generate_tuic_win_client_config "$uuid" "$password"
@@ -2702,13 +2879,14 @@ function display_tuic_config() {
         write_clash_yaml
         generate_tuic_yaml
     done
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
     echo "Clash配置文件已保存至 $clash_file ,请下载使用！" 
 }
 
-function display_Shadowsocks_config() {
+function display_Shadowsocks_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt" 
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"     
+    local output_file="/usr/local/etc/sing-box/output.txt"        
     local local_ip
     local_ip=$(get_local_ip)
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
@@ -2724,8 +2902,19 @@ function display_Shadowsocks_config() {
     echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "密码: $ss_password"  | tee -a "$output_file"
     echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file" 
-    generate_random_filename
+    echo "配置信息已保存至 $output_file"  
+}
+
+function display_Shadowsocks_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"         
+    local local_ip
+    local_ip=$(get_local_ip)
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
+    local ss_password=$(jq -r '.inbounds[0].password' "$config_file")  
     write_phone_client_file
     write_win_client_file
     generate_shadowsocks_win_client_config
@@ -2733,13 +2922,14 @@ function display_Shadowsocks_config() {
     ensure_clash_yaml
     write_clash_yaml
     generate_shadowsocks_yaml 
-    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"   
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"  
 }
 
-function display_socks_config() {
+function display_socks_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt" 
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"    
+    local output_file="/usr/local/etc/sing-box/output.txt"        
     local local_ip
     local_ip=$(get_local_ip)   
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")         
@@ -2756,13 +2946,23 @@ function display_socks_config() {
     echo "------------------------------------------------------------------"  | tee -a "$output_file" 
     echo "$users"  | tee -a "$output_file" 
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "配置信息已保存至 $output_file" 
+    echo "配置信息已保存至 $output_file"    
+}
+
+function display_socks_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"           
+    local local_ip
+    local_ip=$(get_local_ip)   
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")         
+    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                \(.password)"' "$config_file") 
     local IFS=$'\n'
     local user_array=($(echo "$users"))
     unset IFS
     for user_info in "${user_array[@]}"; do
         IFS=' ' read -r username password <<< "$user_info"
-        generate_random_filename
         write_phone_client_file
         write_win_client_file        
         generate_socks_win_client_config "$username" "$password"
@@ -2771,13 +2971,14 @@ function display_socks_config() {
         write_clash_yaml
         generate_socks_yaml         
     done
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
     echo "Clash配置文件已保存至 $clash_file ,请下载使用！"   
 }
 
-function display_Hysteria_config() {
+function display_Hysteria_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"     
+    local output_file="/usr/local/etc/sing-box/output.txt"        
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
     echo -e "${CYAN}Hysteria 节点配置信息：${NC}"  | tee -a "$output_file"
@@ -2800,9 +3001,18 @@ function display_Hysteria_config() {
     done
     echo -e "${CYAN}======================================================================================${NC}"  | tee -a "$output_file" 
     echo "配置信息已保存至 $output_file"   
+}
+
+function display_Hysteria_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"         
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
+    local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
+    local user_count=$(echo "$users" | jq length)     
     for ((i = 0; i < user_count; i++)); do
         local auth_str=$(echo "$users" | jq -r ".[$i].auth_str")
-        generate_random_filename
         write_phone_client_file
         write_win_client_file
         generate_Hysteria_win_client_config "$auth_str"
@@ -2811,13 +3021,14 @@ function display_Hysteria_config() {
         write_clash_yaml
         generate_Hysteria_yaml          
     done
-    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"     
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"    
 }
 
-function display_Hy2_config() {
+function display_Hy2_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"      
+    local output_file="/usr/local/etc/sing-box/output.txt"         
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
     echo -e "${CYAN}Hysteria2 节点配置信息：${NC}"  | tee -a "$output_file"
@@ -2839,10 +3050,19 @@ function display_Hy2_config() {
         echo "用户$i: $password"  | tee -a "$output_file"
     done
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "配置信息已保存至 $output_file"     
+    echo "配置信息已保存至 $output_file"       
+}
+
+function display_Hy2_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml"  
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
+    local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
+    local user_count=$(echo "$users" | jq length)    
     for ((i = 0; i < user_count; i++)); do
         local password=$(echo "$users" | jq -r ".[$i].password")
-        generate_random_filename
         write_phone_client_file
         write_win_client_file
         generate_Hysteria2_win_client_config "$password"
@@ -2851,13 +3071,14 @@ function display_Hy2_config() {
         write_clash_yaml
         generate_Hysteria2_yaml          
     done
-    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"    
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"   
 }
 
-function display_reality_config() {
+function display_reality_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"  
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"      
+    local output_file="/usr/local/etc/sing-box/output.txt"          
     local local_ip
     local_ip=$(get_local_ip)       
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
@@ -2882,14 +3103,13 @@ function display_reality_config() {
     echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "流控类型: $flow_type" | tee -a "$output_file"
     echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    if [ "$transport_type" != "null" ]; then
-        echo "传输协议: $transport_type"  | tee -a "$output_file"
-    elif [ "$transport_type" == "grpc" ]; then
-        if [ -n "$transport_service_name" ] && [ "$transport_service_name" != "null" ]; then
-            echo "grpc-service-name: $transport_service_name" | tee -a "$output_file"
-        fi
+    if [ "$transport_type" == "grpc" ]; then
+        echo "传输协议: $transport_type" | tee -a "$output_file"
+        echo "grpc-service-name: $transport_service_name" | tee -a "$output_file"
+    elif [ "$transport_type" == "null" ]; then
+        echo "传输协议: tcp" | tee -a "$output_file"
     else
-    echo "传输协议: tcp"  | tee -a "$output_file"
+        echo "传输协议: $transport_type" | tee -a "$output_file"
     fi
     echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "ServerName: $server_name" | tee -a "$output_file"
@@ -2901,9 +3121,26 @@ function display_reality_config() {
     echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "PublicKey: $public_key" | tee -a "$output_file"
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file"
+    echo "配置信息已保存至 $output_file"     
+}
+
+function display_reality_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json" 
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
+    local local_ip
+    local_ip=$(get_local_ip)       
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
+    local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
+    local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
+    local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
+    local public_key=$(cat /tmp/public_key_temp.txt)
     for short_id in $short_ids; do   
-        generate_random_filename
         write_phone_client_file
         write_win_client_file
         generate_vless_win_client_config "$short_id"
@@ -2912,22 +3149,24 @@ function display_reality_config() {
             ensure_clash_yaml
             write_clash_yaml
             generate_vless_reality_grpc_yaml
-            echo "Clash配置文件已保存至 $clash_file ,请下载使用！"
         elif [ "$transport_type" == "http" ]; then
             :
         else
             ensure_clash_yaml
             write_clash_yaml
             generate_vless_reality_vision_yaml
-            echo "Clash配置文件已保存至 $clash_file ,请下载使用！"
-        fi       
-    done      
+        fi              
+    done
+    if [ "$transport_type" != "http" ]; then
+        echo "Clash配置文件已保存至 $clash_file，请下载使用！"
+    fi    
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"          
 }
 
-function display_vmess_config() {
+function display_vmess_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"     
+    local output_file="/usr/local/etc/sing-box/output.txt"         
     local local_ip
     local_ip=$(get_local_ip)
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
@@ -2963,10 +3202,26 @@ function display_vmess_config() {
     fi
        
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file"
+    echo "配置信息已保存至 $output_file"  
+}
+
+function display_vmess_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
+    local local_ip
+    local_ip=$(get_local_ip)
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local UUIDS=($(jq -r '.inbounds[0].users[].uuid' "$config_file"))
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")  
+    local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")   
+    local show_clash_message=true
+
     for ((i = 0; i < ${#UUIDS[@]}; i++)); do
         local uuid="${UUIDS[i]}" 
-        generate_random_filename
         write_phone_client_file
         write_win_client_file
         generate_vmess_win_client_config
@@ -2995,15 +3250,25 @@ function display_vmess_config() {
             ensure_clash_yaml
             write_clash_yaml
             generate_vmess_grpc_tls_yaml
+        elif [ -n "$server_name" ] && [ "$server_name" != "null" ] && [ "$transport_type" == "http" ]; then
+            show_clash_message=false
         fi               
     done
-    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"     
+    if [ "$transport_type" == "http" ]; then
+        echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+        echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+    fi
+
+    if [ "$transport_type" != "http" ] && [ "$show_clash_message" = true ]; then
+        echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+        echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"    
+        echo "Clash配置文件已保存至 $clash_file，请下载使用！"
+    fi
 }
 
-function display_trojan_config() {
+function display_trojan_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"  
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"     
+    local output_file="/usr/local/etc/sing-box/output.txt"          
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
@@ -3034,9 +3299,22 @@ function display_trojan_config() {
     fi
     echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"
+}
+
+function display_trojan_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
+    local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
+    local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
+    local alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
+    local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
+    local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
+    local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
     for ((i = 0; i < ${#passwords[@]}; i++)); do
         local password="${passwords[i]}" 
-        generate_random_filename
         write_phone_client_file
         write_win_client_file
         generate_trojan_win_client_config
@@ -3046,27 +3324,28 @@ function display_trojan_config() {
             ensure_clash_yaml
             write_clash_yaml
             generate_trojan_ws_yaml
-            echo "Clash配置文件已保存至 $clash_file ,请下载使用！" 
         elif [ "$transport_type" == "grpc" ]; then
             ensure_clash_yaml
             write_clash_yaml
             generate_trojan_grpc_yaml
-            echo "Clash配置文件已保存至 $clash_file ,请下载使用！" 
         elif [ "$transport_type" == "http" ]; then
             :
         else
             ensure_clash_yaml
             write_clash_yaml
             generate_trojan_tcp_yaml
-            echo "Clash配置文件已保存至 $clash_file ,请下载使用！" 
         fi       
     done
+    if [ "$transport_type" != "http" ]; then
+        echo "Clash配置文件已保存至 $clash_file，请下载使用！"
+    fi    
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"    
 }
 
-function display_shadowtls_config() {
+function display_shadowtls_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"
-    local clash_file="/usr/local/etc/sing-box/clash.yaml"     
+    local output_file="/usr/local/etc/sing-box/output.txt"         
     local local_ip
     local_ip=$(get_local_ip)    
     local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
@@ -3089,13 +3368,26 @@ function display_shadowtls_config() {
     echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "握手服务器地址: $user_input" | tee -a "$output_file"
     echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
-    echo "配置信息已保存至 $output_file"    
+    echo "配置信息已保存至 $output_file"      
+}
+
+function display_shadowtls_config_files() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local clash_file="/usr/local/etc/sing-box/clash.yaml" 
+    local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
+    local local_ip
+    local_ip=$(get_local_ip)    
+    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
+    local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "\(.password)"' "$config_file")
+    local user_input=$(jq -r '.inbounds[0].handshake.server' "$config_file")
+    local ss_password=$(jq -r '.inbounds[1].password' "$config_file")  
+    local method=$(jq -r '.inbounds[1].method' "$config_file")     
     local IFS=$'\n'
     local shadowtls_password=($(echo "$shadowtls_passwords"))
     unset IFS
     for shadowtls_password in "${shadowtls_password[@]}"; do
         IFS=' ' read -r password <<< "$shadowtls_password"
-        generate_random_filename
         write_phone_client_file
         write_win_client_file
         generate_shadowtls_win_client_config "$shadowtls_password"
@@ -3104,7 +3396,9 @@ function display_shadowtls_config() {
         write_clash_yaml
         generate_shadowtls_yaml          
     done
-    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"      
+    echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
+    echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
+    echo "Clash配置文件已保存至 $clash_file ,请下载使用！"   
 }
 
 function view_saved_config() {
@@ -3245,7 +3539,8 @@ function Shadowsocks_install() {
     systemctl enable sing-box   
     systemctl start sing-box
     systemctl restart sing-box
-    display_Shadowsocks_config
+    display_Shadowsocks_config_info
+    display_Shadowsocks_config_files
 }
 
 function socks_install() {
@@ -3258,7 +3553,8 @@ function socks_install() {
     systemctl enable sing-box   
     systemctl start sing-box
     systemctl restart sing-box
-    display_socks_config
+    display_socks_config_info
+    display_socks_config_files
 }
 
 function NaiveProxy_install() {
@@ -3272,7 +3568,8 @@ function NaiveProxy_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_NaiveProxy_config
+    display_naive_config_info
+    generate_naive_config_files
 }
 
 function tuic_install() {
@@ -3286,7 +3583,8 @@ function tuic_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_tuic_config
+    display_tuic_config_info
+    display_tuic_config_files
 }
 
 function Hysteria_install() {
@@ -3300,7 +3598,8 @@ function Hysteria_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_Hysteria_config
+    display_Hysteria_config_info
+    display_Hysteria_config_files
 }
 
 function shadowtls_install() {
@@ -3313,7 +3612,8 @@ function shadowtls_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_shadowtls_config
+    display_shadowtls_config_info
+    display_shadowtls_config_files
 }
 
 function reality_install() {
@@ -3326,7 +3626,8 @@ function reality_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_reality_config
+    display_reality_config_info
+    display_reality_config_files
 }
 
 function Hysteria2_install() {
@@ -3340,7 +3641,8 @@ function Hysteria2_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_Hy2_config
+    display_Hy2_config_info
+    display_Hy2_config_files
 }
 
 function trojan_install() {
@@ -3354,7 +3656,8 @@ function trojan_install() {
     systemctl enable sing-box 
     systemctl start sing-box
     systemctl restart sing-box
-    display_trojan_config
+    display_trojan_config_info
+    display_trojan_config_files
 }
 
 function vmess_install() {
@@ -3366,7 +3669,8 @@ function vmess_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
-    display_vmess_config
+    display_vmess_config_info
+    display_vmess_config_files
 }
 
 function wireguard_install() {
@@ -3403,7 +3707,7 @@ echo -e "║${CYAN} [7]${NC}  Trojan                        ${CYAN} [8]${NC}   H
 echo -e "║${CYAN} [9]${NC}  Hysteria2                     ${CYAN} [10]${NC}  ShadowTLS                    ║"
 echo -e "║${CYAN} [11]${NC} NaiveProxy                    ${CYAN} [12]${NC}  Shadowsocks                  ║"
 echo -e "║${CYAN} [13]${NC} WireGuard                     ${CYAN} [14]${NC}  查看节点信息                 ║"
-echo -e "║${CYAN} [15]${NC} 更新代理工具                  ${CYAN} [16]${NC}  重启服务                     ║"
+echo -e "║${CYAN} [15]${NC} 更新内核                      ${CYAN} [16]${NC}  重启服务                     ║"
 echo -e "║${CYAN} [17]${NC} 更新证书                      ${CYAN} [18]${NC}  卸载                         ║"
 echo -e "║${CYAN} [0]${NC}  退出                                                              ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
