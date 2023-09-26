@@ -20,7 +20,7 @@ yum update && yum -y install curl wget tar socat jq git openssl util-linux gcc-c
 ```
 - **使用以下命令运行脚本**
 ```
-wget -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh && chmod +x /root/sing-box.sh && ln -s /root/sing-box.sh /usr/local/bin/sing-box && bash /root/sing-box.sh
+wget -N -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh && chmod +x /root/sing-box.sh && ln -sf /root/sing-box.sh /usr/local/bin/sing-box && bash /root/sing-box.sh
 ```
 # **Hysteria端口跳跃**
 ```
