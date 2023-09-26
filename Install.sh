@@ -3710,6 +3710,11 @@ function Update_certificate() {
     Reapply_certificates
 } 
 
+function Update_Script() {
+    wget -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh
+    chmod +x /root/sing-box.sh 
+} 
+
 function main_menu() {
 echo "╔════════════════════════════════════════════════════════════════════════╗"
 echo -e "║ ${CYAN}作者${NC}： Mr. xiao                                                        ║"
@@ -3725,13 +3730,13 @@ echo -e "║${CYAN} [7]${NC}  Trojan                        ${CYAN} [8]${NC}   H
 echo -e "║${CYAN} [9]${NC}  Hysteria2                     ${CYAN} [10]${NC}  ShadowTLS                    ║"
 echo -e "║${CYAN} [11]${NC} NaiveProxy                    ${CYAN} [12]${NC}  Shadowsocks                  ║"
 echo -e "║${CYAN} [13]${NC} WireGuard                     ${CYAN} [14]${NC}  查看节点信息                 ║"
-echo -e "║${CYAN} [15]${NC} 更新内核                      ${CYAN} [16]${NC}  重启服务                     ║"
-echo -e "║${CYAN} [17]${NC} 更新证书                      ${CYAN} [18]${NC}  卸载                         ║"
-echo -e "║${CYAN} [0]${NC}  退出                                                              ║"
+echo -e "║${CYAN} [15]${NC} 更新内核                      ${CYAN} [16]${NC}  更新脚本                     ║"
+echo -e "║${CYAN} [17]${NC} 更新证书                      ${CYAN} [18]${NC}  重启服务                     ║"
+echo -e "║${CYAN} [19]${NC} 卸载                          ${CYAN} [0]${NC}   退出                         ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 
     local choice
-    read -p "请选择 [0-15]: " choice
+    read -p "请选择 [0-19]: " choice
 
     case $choice in
         1)
@@ -3781,12 +3786,15 @@ echo "╚═══════════════════════�
             update_proxy_tool
             ;;
         16)
-            check_and_restart_services
+            Update_Script
             ;;   
         17)
             Update_certificate
-            ;;                       
+            ;; 
         18)
+            check_and_restart_services
+            ;;                                    
+        19)
             uninstall
             ;;                   
         0)
