@@ -310,7 +310,7 @@ function enable_bbr() {
         echo "Enable BBR..."
         echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
         echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-        sysctl -p
+        sysctl -p > /dev/null
         echo "BBR has been enabled"
     else
         echo "BBR is already enabled, skipping configuration."
@@ -895,7 +895,7 @@ function get_local_ip() {
 
 function get_domain() {
     while true; do
-        read -p "请输入域名（关闭Cloudflare代理状态）： " domain
+        read -p "请输入域名（关闭Cloudflare代理）： " domain
 
         local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
         local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
@@ -910,13 +910,13 @@ function get_domain() {
                 break
             else
                 if [[ -z "$resolved_ipv4" && -n "$local_ip_v4" ]]; then
-                    resolved_ip_v4=$(ping -4 "$domain" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
+                    resolved_ip_v4=$(ping -4 "$domain" -c 1 2>/dev/null | sed '1{s/[^(]*(//;s/).*//;q}')
                     if [[ ("$resolved_ip_v4" == "$local_ip_v4" && ! -z "$resolved_ip_v4") ]]; then
                         break
                     fi
                 fi
                 if [[ -z "$resolved_ipv6" && -n "$local_ip_v6" ]]; then
-                    resolved_ip_v6=$(ping -6 "$domain" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
+                    resolved_ip_v6=$(ping -6 "$domain" -c 1 2>/dev/null | sed '1{s/[^(]*(//;s/).*//;q}')
                     if [[ ("$resolved_ip_v6" == "$local_ip_v6" && ! -z "$resolved_ip_v6") ]]; then
                         break
                     fi
@@ -1303,12 +1303,52 @@ function set_congestion_control() {
     done
 }
 
+function extract_certificate_and_key_paths() {
+    local config_file="/usr/local/etc/sing-box/config.json"
+    local domain="$1"
+    local found_certificate=false
+    local found_key=false
+    local cert_path
+    local key_path
+
+    if [[ ! -f "$config_file" ]]; then
+        return 1
+    fi
+
+    if grep -q "$domain.crt" "$config_file"; then
+        found_certificate=true
+        cert_path=$(grep 'certificate_path' "$config_file" | grep "$domain.crt" | head -n 1 | awk -F'"' '{print $4}')
+    fi
+
+    if grep -q "$domain.key" "$config_file"; then
+        found_key=true
+        key_path=$(grep 'key_path' "$config_file" | grep "$domain.key" | head -n 1 | awk -F'"' '{print $4}')
+    fi
+
+    if [[ ! -f "$cert_path" ]]; then
+        found_certificate=false
+        return 2
+    fi
+
+    if [[ ! -f "$key_path" ]]; then
+        found_key=false
+        return 2
+    fi
+
+    certificate_path="$cert_path"
+    private_key_path="$key_path"
+
+    return 0
+}
+
 function ask_certificate_option() {
+    local certificate_option
     while true; do
         read -p "请选择证书来源 (默认1)：
 1). 自动申请证书
-2). 自备证书
-请选择[1-2]: " certificate_option
+2). 自定义证书路径
+3). 自动设置证书路径(仅适用于已使用本脚本申请过证书）
+请选择[1-3]: " certificate_option
         certificate_option=${certificate_option:-1}
 
         case $certificate_option in
@@ -1324,6 +1364,16 @@ function ask_certificate_option() {
                 set_certificate_and_private_key
                 break
                 ;;
+            3)
+                echo "You have chosen to automatically configure the certificate."
+                check_firewall_configuration
+                extract_certificate_and_key_paths "$domain"
+                if [[ $? -eq 2 ]]; then
+                    echo -e "${RED}错误：未找到证书文件，请重新选择！${NC}"
+                    continue
+                fi
+                break
+                ;;            
             *)
                 echo -e "${RED}错误：无效的选择，请重新输入！${NC}"
                 ;;
@@ -1331,34 +1381,30 @@ function ask_certificate_option() {
     done
 }
 
-function add_multiple_shadowtls_users() {
-    local add_multiple_users="Y"
-    
-    while [[ $add_multiple_users == [Yy] ]]; do
-        read -p "是否添加多用户？(Y/N，默认为N): " add_multiple_users
-
-        if [[ $add_multiple_users == [Yy] ]]; then
-            add_shadowtls_user
-        fi
-    done
-}
-
 function select_flow_type() {
     while true; do
         read -p "请选择节点类型 (默认1)：
 1). vless+vision+reality
-2). vless+h2/grpc+reality
+2). vless+h2+reality
+3). vless+grpc+reality
 请选择[1-2]: " flow_option
 
         case $flow_option in
             "" | 1)
                 flow_type="xtls-rprx-vision"
+                transport_removed=true
                 break
                 ;;
             2)
                 flow_type=""
+                transport_removed=false
                 break
                 ;;
+            3)
+                flow_type=""
+                transport_removed=false
+                break
+                ;;                
             *)
                 echo -e "${RED}错误的选项，请重新输入！${NC}" >&2
                 ;;
@@ -1366,35 +1412,13 @@ function select_flow_type() {
     done
 }
 
-function generate_tls_config() {    
-    if [ "$node_type" -ge 4 ] && [ "$node_type" -le 7 ]; then
-        tls_enabled=true
-        get_domain
-        ask_certificate_option                
-    else
-        tls_enabled=false
-    fi
-
-    if [ "$tls_enabled" = true ]; then
-        tls_config=",
-      \"tls\": {
-        \"enabled\": true,
-        \"server_name\": \"$domain\",
-        \"certificate_path\": \"$certificate_path\",
-        \"key_path\": \"$private_key_path\"
-      }"
-    else
-        tls_config=""
-    fi
-}
-
 function prompt_setup_type() {
     while true; do
-        read -p "请选择传输层协议（默认1）：
-1). TCP（trojan+tcp+tls）
-2). ws（trojan+ws+tls）
-3). H2C（trojan+H2C+tls）       
-4). gRPC（trojan+gRPC+tls）
+        read -p "请选择节点类型（默认1）：
+1). trojan+tcp+tls
+2). trojan+ws+tls
+3). trojan+H2C+tls       
+4). trojan+gRPC+tls
 请选择 [1-4]: " setup_type
         if [ -z "$setup_type" ]; then
             setup_type="1"
@@ -1424,30 +1448,15 @@ function prompt_setup_type() {
     done
 }
 
-function generate_transport_type() {
-    while true; do
-        read -p "请选择传输层协议(默认1)：
-1). http
-2). grpc
-请选择[1-2]: " transport_option
+function add_multiple_shadowtls_users() {
+    local add_multiple_users="Y"
+    
+    while [[ $add_multiple_users == [Yy] ]]; do
+        read -p "是否添加多用户？(Y/N，默认为N): " add_multiple_users
 
-        case $transport_option in
-            1)
-                transport_type="http"
-                break
-                ;;
-            2)
-                transport_type="grpc"
-                break
-                ;;
-            "")
-                transport_type="http"
-                break
-                ;;                
-            *)
-                echo -e "${RED}错误的选项，请重新输入！${NC}" >&2
-                ;;
-        esac
+        if [[ $add_multiple_users == [Yy] ]]; then
+            add_shadowtls_user
+        fi
     done
 }
 
@@ -1785,24 +1794,43 @@ function prompt_and_generate_transport_config() {
     fi
 }
 
-function generate_transport_config() {
-    if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
+function generate_vless_transport_config() {    
+    if [[ $flow_option == 1 ]]; then
         transport_config=""
-    else
-        generate_transport_type
-        if [[ "$transport_option" == 1 || -z "$transport_option" ]]; then
-            transport_config='      
-      "transport": {
-        "type": "http"
-      },'
-        elif [[ "$transport_option" == 2 ]]; then
-            service_name=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
-            transport_config="
+    elif [[ $flow_option == 2 ]]; then
+        transport_config="
+      \"transport\": {
+        \"type\": \"http\"
+      },"
+    elif [[ $flow_option == 3 ]]; then
+        service_name=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
+        transport_config="
       \"transport\": {
         \"type\": \"grpc\",
         \"service_name\": \"$service_name\"
       },"
-        fi
+    fi
+}
+
+function generate_tls_config() {    
+    if [ "$node_type" -ge 4 ] && [ "$node_type" -le 7 ]; then
+        tls_enabled=true
+        get_domain
+        ask_certificate_option                
+    else
+        tls_enabled=false
+    fi
+
+    if [ "$tls_enabled" = true ]; then
+        tls_config=",
+      \"tls\": {
+        \"enabled\": true,
+        \"server_name\": \"$domain\",
+        \"certificate_path\": \"$certificate_path\",
+        \"key_path\": \"$private_key_path\"
+      }"
+    else
+        tls_config=""
     fi
 }
 
@@ -2063,15 +2091,15 @@ function generate_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag    
-    listen_port
-    select_flow_type
-    generate_transport_config    
+    select_flow_type 
+    listen_port   
     generate_uuid
     generate_server_name
     generate_target_server
     generate_private_key
     set_short_id
     configure_short_ids
+    generate_vless_transport_config    
     local found_rules=0
     local found_inbounds=0    
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v transport_config="$transport_config" -v server_name="$server_name" -v target_server="$target_server" -v private_key="$private_key" -v short_id="$short_id" -v short_ids="$short_ids" '
@@ -2118,12 +2146,12 @@ function generate_trojan_config() {
     prompt_setup_type  
     listen_port
     set_password
-    trojan_multiple_users     
+    trojan_multiple_users
+    prompt_and_generate_transport_config         
     get_domain 
     ask_certificate_option
     local cert_path="$certificate_path"
-    local key_path="$private_key_path"
-    prompt_and_generate_transport_config   
+    local key_path="$private_key_path"   
     local found_rules=0
     local found_inbounds=0              
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" -v domain="$domain" -v certificate_path="$certificate_path" -v private_key_path="$private_key_path" -v transport_config="$transport_config" '
@@ -3440,6 +3468,8 @@ function uninstall_sing_box() {
     rm -rf /usr/local/bin/sing-box
     rm -rf /usr/local/etc/sing-box
     rm -rf /etc/systemd/system/sing-box.service
+    rm -rf /etc/ssl/private/*.crt 
+    rm -rf /etc/ssl/private/*.key 
     systemctl daemon-reload
     echo "sing-box 卸载完成。"
 }
