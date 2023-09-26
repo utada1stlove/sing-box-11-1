@@ -1387,7 +1387,7 @@ function select_flow_type() {
 1). vless+vision+reality
 2). vless+h2+reality
 3). vless+grpc+reality
-请选择[1-2]: " flow_option
+请选择[1-3]: " flow_option
 
         case $flow_option in
             "" | 1)
