@@ -7,6 +7,8 @@ NC='\033[0m'
 
 certificate_path=""
 private_key_path=""
+public_key=""
+private_key=""
 
 function configure_dns64() {
     local ipv4_address
@@ -795,29 +797,6 @@ function override_address() {
   done
 }
 
-function generate_private_key_config() {
-    local private_key
-
-    while true; do
-        read -p "请输入私钥 (默认随机生成私钥): " private_key
-
-        if [[ -z "$private_key" ]]; then
-            local keypair_output=$(sing-box generate reality-keypair)
-            private_key=$(echo "$keypair_output" | awk -F: '/PrivateKey/{gsub(/ /, "", $2); print $2}')
-            echo "$keypair_output" | awk -F: '/PublicKey/{gsub(/ /, "", $2); print $2}' > /tmp/public_key_temp.txt
-            break
-        fi
-
-        if openssl pkey -inform PEM -noout -text -in <(echo "$private_key") >/dev/null 2>&1; then
-            break
-        else
-            echo -e "${RED}无效的私钥，请重新输入！${NC}" >&2
-        fi
-    done
-    
-    echo "$private_key"
-}
-
 function generate_server_name() {
     while true; do
         read -p "请输入可用的 serverName 列表 (默认为 nijigen-works.jp): " user_input
@@ -1064,22 +1043,31 @@ function Reapply_certificates() {
 }
 
 function generate_private_key() {
+    local local_public_key
+    local local_private_key
+
     while true; do
-        read -p "请输入私钥 (默认随机生成私钥): " private_key
-
-        if [[ -z "$private_key" ]]; then
+        read -p "请输入私钥 (默认随机生成私钥): " local_private_key
+        if [[ -z "$local_private_key" ]]; then
             local keypair_output=$(sing-box generate reality-keypair)
-            private_key=$(echo "$keypair_output" | awk -F: '/PrivateKey/{gsub(/ /, "", $2); print $2}')
-            echo "$keypair_output" | awk -F: '/PublicKey/{gsub(/ /, "", $2); print $2}' > /tmp/public_key_temp.txt
-            break
-        fi
-
-        if openssl pkey -inform PEM -noout -text -in <(echo "$private_key") >/dev/null 2>&1; then
+            local_private_key=$(echo "$keypair_output" | awk -F: '/PrivateKey/{gsub(/ /, "", $2); print $2}')
+            local_public_key=$(echo "$keypair_output" | awk -F: '/PublicKey/{gsub(/ /, "", $2); print $2}')
             break
         else
-            echo -e "${RED}无效的私钥，请重新输入！${NC}"
+            if [[ "$local_private_key" =~ ^[A-Za-z0-9_\-]{43}$ ]]; then
+                read -p "请输入公钥: " local_public_key
+                if ! [[ "$local_public_key" =~ ^[A-Za-z0-9_\-]{43}$ ]]; then
+                    echo -e "${RED}无效的公钥，请重新输入！${NC}" 
+                else
+                    break
+                fi
+            else
+                echo -e "${RED}无效的私钥，请重新输入！${NC}"
+            fi
         fi
-    done    
+    done
+    public_key="$local_public_key"
+    private_key="$local_private_key"
 }
 
 function choose_node_type() {
@@ -2090,6 +2078,7 @@ $users
 function generate_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
+    local lobal_private_key="$private_key"   
     generate_unique_tag    
     select_flow_type 
     listen_port   
@@ -2610,7 +2599,7 @@ function generate_vless_win_client_config() {
 
 function generate_vless_phone_client_config() {
   local phone_client_file="/usr/local/etc/sing-box/phone_client.json"
-  local proxy_name
+  local proxy_name 
   
   while true; do
     proxy_name="vless-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
@@ -2639,7 +2628,7 @@ function generate_vless_reality_vision_yaml() {
 
 function generate_vless_reality_grpc_yaml() {
   local filename="/usr/local/etc/sing-box/clash.yaml"
-  local proxy_name
+  local proxy_name 
   while true; do
     proxy_name="vless-reality-grpc-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
     if ! grep -q "name: $proxy_name" "$filename"; then
@@ -3117,7 +3106,7 @@ function display_reality_config_info() {
     local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
     local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
-    local public_key=$(cat /tmp/public_key_temp.txt)
+    local lobal_public_key="$public_key" 
     if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
         transport_type="tcp"
     fi
@@ -3167,7 +3156,7 @@ function display_reality_config_files() {
     local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
     local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
-    local public_key=$(cat /tmp/public_key_temp.txt)
+    local lobal_public_key="$public_key" 
     for short_id in $short_ids; do   
         write_phone_client_file
         write_win_client_file
