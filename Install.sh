@@ -5,6 +5,18 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
 
+listen_port=""
+override_port=""
+ip_v4=""
+ip_v6=""
+user_names=()
+user_passwords=()
+user_uuids=()
+ss_passwords=() 
+stls_passwords=()
+short_ids=()   
+up_mbps=""
+down_mbps=""
 certificate_path=""
 private_key_path=""
 public_key=""
@@ -298,7 +310,6 @@ function install_sing_box() {
         
     if [[ $result -eq 0 ]]; then
         configure_dns64
-        enable_bbr
         select_sing_box_install_option
         configure_sing_box_service
         create_sing_box_folder
@@ -308,23 +319,36 @@ function install_sing_box() {
 }
 
 function enable_bbr() {
-    if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
-        echo "Enable BBR..."
-        echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
-        echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-        sysctl -p > /dev/null
-        echo "BBR has been enabled"
-    else
-        echo "BBR is already enabled, skipping configuration."
-    fi
+    while true; do
+        read -p "是否开启 BBR (Y/N，默认Y)? " -i "y" response
+        response=${response:-"y"}
+
+        if [[ $response == "y" || $response == "Y" ]]; then
+            if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
+                echo "Enable BBR..."
+                echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+                echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+                sysctl -p > /dev/null
+                echo "BBR has been enabled"
+            else
+                echo "BBR is already enabled, skipping configuration."
+            fi
+            break
+        elif [[ $response == "n" || $response == "N" ]]; then
+            echo "BBR will not be enabled."
+            break
+        else
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
+        fi
+    done
 }
 
 function select_sing_box_install_option() {
     while true; do
         echo "请选择 sing-box 的安装方式（默认1）："
-        echo "1). 下载安装 sing-box（Latest 版本，推荐使用）"
-        echo "2). 下载安装 sing-box（Beta 版本，支持hysteria2）"
-        echo "3). 编译安装 sing-box（低配置服务器慎用）"
+        echo "1). 下载安装 sing-box（Latest 版本）"
+        echo "2). 下载安装 sing-box（Beta 版本）"
+        echo "3). 编译安装 sing-box（完整功能版本）"
 
         local install_option
         read -p "请选择 [1-2]: " install_option
@@ -426,18 +450,21 @@ function install_latest_sing_box() {
     local download_url
 
     case $arch in
-        x86_64)
+        x86_64|amd64)
             download_url=$(curl -s $url | grep -o "https://github.com[^\"']*linux-amd64.tar.gz")
             ;;
         armv7l)
             download_url=$(curl -s $url | grep -o "https://github.com[^\"']*linux-armv7.tar.gz")
             ;;
-        aarch64)
+        aarch64|arm64)
             download_url=$(curl -s $url | grep -o "https://github.com[^\"']*linux-arm64.tar.gz")
             ;;
         amd64v3)
             download_url=$(curl -s $url | grep -o "https://github.com[^\"']*linux-amd64v3.tar.gz")
             ;;
+        s390x)
+            download_url=$(curl -s $url | grep -o "https://github.com[^\"']*linux-s390x.tar.gz")
+            ;;            
         *)
             echo -e "${RED}不支持的架构：$arch${NC}"
             return 1
@@ -464,18 +491,21 @@ function install_Pre_release_sing_box() {
     local download_url
 
     case $arch in
-        x86_64)
+        x86_64|amd64)
             download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-amd64.tar.gz")) | .browser_download_url' | head -n 1)
             ;;
         armv7l)
             download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-armv7.tar.gz")) | .browser_download_url' | head -n 1)
             ;;
-        aarch64)
+        aarch64|arm64)
             download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-arm64.tar.gz")) | .browser_download_url' | head -n 1)
             ;;
         amd64v3)
             download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-amd64v3.tar.gz")) | .browser_download_url' | head -n 1)
             ;;
+        s390x)
+            download_url=$(curl -s "$url" | jq -r '.[] | select(.prerelease == true) | .assets[] | select(.browser_download_url | contains("linux-s390x.tar.gz")) | .browser_download_url' | head -n 1)
+            ;;            
         *)
             echo -e "${RED}不支持的架构：$arch${NC}"
             return 1
@@ -620,125 +650,164 @@ WantedBy=multi-user.target'
         echo "juicity startup service has been configured."
 }
 
-function listen_port() {
+function set_listen_port() {
     while true; do
-        read -p "请输入监听端口 (默认443): " listen_port
-        listen_port=${listen_port:-443}
+        read -p "请输入监听端口 (默认443): " new_listen_port
+        new_listen_port=${new_listen_port:-443}
 
-        if [[ $listen_port =~ ^[1-9][0-9]{0,4}$ && $listen_port -le 65535 ]]; then
-            echo "监听端口: $listen_port"
+        if [[ $new_listen_port =~ ^[1-9][0-9]{0,4}$ && $new_listen_port -le 65535 ]]; then
+            echo "监听端口：$new_listen_port"
             break
         else
             echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}" >&2
         fi
+    done 
+    listen_port="$new_listen_port"   
+}
+
+function set_user_name() {  
+    while true; do
+        read -p "请输入用户名 (默认随机生成): " new_user_name
+        if [[ -z "$new_user_name" ]]; then
+            new_user_name=$(sing-box generate rand --base64 6 2>/dev/null || openssl rand -base64 5)           
+            echo "用户名：$new_user_name"
+            break
+        elif [[ ! -z "$new_user_name" ]]; then
+            break
+        fi
+    done 
+    user_names+=("$new_user_name")   
+}
+
+function set_user_password() { 
+    while true; do
+        read -p "请输入密码（默认随机生成）: " new_user_password
+        if [[ -z "$new_user_password" ]]; then
+            new_user_password=$(sing-box generate rand --base64 9 2>/dev/null || openssl rand -base64 9)
+            echo "密码：$new_user_password"            
+            break
+        elif [[ ! -z "$new_user_password" ]]; then
+            break
+        fi
+    done
+    user_passwords+=("$new_user_password")    
+}
+
+function set_ss_password() {
+    while true; do
+        read -p "请输入 Shadowsocks 密码（默认随机生成）: " ss_user_password
+        if [[ -z $ss_user_password ]]; then
+            if [[ $encryption_choice == 1 || $encryption_choice == 2 ]]; then
+                ss_password=$(sing-box generate rand --base64 32)
+                echo "Shadowsocks 密码: $ss_password"
+            else
+                ss_password=$(sing-box generate rand --base64 16)
+                echo "Shadowsocks 密码: $ss_password"
+            fi
+            ss_passwords+=("$ss_password")
+            break
+        elif [[ $encryption_choice == 1 || $encryption_choice == 2 ]] && [[ ${#ss_user_password} -eq 32 ]]; then
+            ss_password="$ss_user_password"
+            echo "Shadowsocks 密码: $ss_password"
+            ss_passwords+=("$ss_password")
+            break
+        elif [[ $encryption_choice != 1 && $encryption_choice != 2 ]] && [[ ${#ss_user_password} -eq 16 ]]; then
+            ss_password="$ss_user_password"
+            echo "Shadowsocks 密码: $ss_password"
+            ss_passwords+=("$ss_password")
+            break
+        else
+            echo -e "${RED}错误：密码长度不符合要求，请重新输入！${NC}"
+        fi
     done
 }
 
-function set_username() {
-    read -p "请输入用户名 (默认随机生成): " new_username
-    if [[ -z "$new_username" ]]; then
-        username=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
-        echo "随机生成的用户名: $username"
-    else
-        username="$new_username"
-        echo "用户名: $username"
-    fi
-}
-
-function set_password() {
-    read -p "请输入密码（默认随机生成）: " password
-
-    if [[ -z "$password" ]]; then
-        password=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)
-        echo "随机生成的密码：$password"
-    else
-        echo "密码：$password"
-    fi
-}
-
-function read_up_speed() {
+function set_stls_password() {
     while true; do
-        read -p "请输入上行速率 (默认50): " up_mbps
-        up_mbps=${up_mbps:-50}
+        read -p "请输入 ShadowTLS 密码（默认随机生成）: " stls_user_password
+        if [[ -z $stls_user_password ]]; then
+            if [[ $encryption_choice == 1 || $encryption_choice == 2 ]]; then
+                stls_password=$(sing-box generate rand --base64 32)
+                echo "ShadowTLS 密码: $stls_password"
+            else
+                stls_password=$(sing-box generate rand --base64 16)
+                echo "ShadowTLS 密码: $stls_password"
+            fi
+            stls_passwords+=("$stls_password")
+            break
+        elif [[ $encryption_choice == 1 || $encryption_choice == 2 ]] && [[ ${#stls_user_password} -eq 32 ]]; then
+            stls_password="$stls_user_password"
+            echo "ShadowTLS 密码: $stls_password"
+            stls_passwords+=("$stls_password")
+            break
+        elif [[ $encryption_choice != 1 && $encryption_choice != 2 ]] && [[ ${#stls_user_password} -eq 16 ]]; then
+            stls_password="$stls_user_password"
+            echo "ShadowTLS 密码: $stls_password"
+            stls_passwords+=("$stls_password")
+            break
+        else
+            echo -e "${RED}错误：密码长度不符合要求，请重新输入！${NC}"
+        fi
+    done
+}
 
-        if [[ $up_mbps =~ ^[0-9]+$ ]]; then
-            echo "上行速率设置成功：$up_mbps Mbps"
+function set_up_speed() { 
+    while true; do
+        read -p "请输入上行速率 (默认50): " new_up_mbps
+        new_up_mbps=${up_mbps:-50}
+        if [[ $new_up_mbps =~ ^[0-9]+$ ]]; then            
+            echo "上行速率：$new_up_mbps Mbps"
             break
         else
             echo -e "${RED}错误：请输入数字作为上行速率！${NC}"
         fi
     done
+    up_mbps="$new_up_mbps"
 }
 
-function read_down_speed() {
+function set_down_speed() {
     while true; do
-        read -p "请输入下行速率 (默认100): " down_mbps
-        down_mbps=${down_mbps:-100}
-
-        if [[ $down_mbps =~ ^[0-9]+$ ]]; then
-            echo "下行速率设置成功：$down_mbps Mbps"
+        read -p "请输入下行速率 (默认100): " new_down_mbps
+        new_down_mbps=${new_down_mbps:-100}
+        if [[ $new_down_mbps =~ ^[0-9]+$ ]]; then            
+            echo "下行速率：$new_down_mbps Mbps"
             break
         else
             echo -e "${RED}错误：请输入数字作为下行速率！${NC}"
         fi
     done
+    down_mbps="$new_down_mbps"
 }
 
-function generate_uuid() {
-    if [[ -n $(command -v uuidgen) ]]; then
-        command_name="uuidgen"
-    elif [[ -n $(command -v uuid) ]]; then
-        command_name="uuid -v 4"
-    else
-        echo -e "${RED}错误：无法生成UUID，请手动设置！${NC}"
-        exit 1
-    fi
-
+function set_uuid() {
     while true; do
-        read -p "请输入UUID（默认随机生成）: " input_uuid
-        if [[ -n $input_uuid ]]; then
-            if [[ $input_uuid =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-                uuid=$input_uuid
-                break
-            else
-                echo -e "${RED}无效的UUID格式，请重新输入！${NC}"
-            fi
-        else
-            uuid=$($command_name)
-            break
+        read -p "请输入UUID（默认随机生成）: " new_user_uuid
+        if [ -z "$new_user_uuid" ]; then
+            new_user_uuid=$(sing-box generate uuid 2>/dev/null || openssl rand -hex 16 | awk '{print substr($1,1,8) "-" substr($1,9,4) "-" substr($1,13,4) "-" substr($1,17,4) "-" substr($1,21)}')
         fi
-    done
-
-    echo "生成的UUID：$uuid"
-}
-
-function set_short_id() {
-    while true; do
-        read -p "请输入 short id (默认随机生成): " short_id
-
-        if [[ -z "$short_id" ]]; then
-            short_id=$(openssl rand -hex 8)
-            break
-        elif [[ "$short_id" =~ ^[0-9a-fA-F]{2,16}$ ]]; then
+        if [[ $new_user_uuid =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then           
+            echo "UUID：$new_user_uuid"
             break
         else
-            echo "错误：请输入两到八位的十六进制字符串！"
+            echo -e "${RED}无效的UUID格式，请重新输入！${NC}"
         fi
     done
+    user_uuids+=("$new_user_uuid")
 }
 
-function override_port() {
+function set_override_port() {
     while true; do
-        read -p "请输入目标端口 (默认443): " override_port
-        override_port=${override_port:-443}
+        read -p "请输入目标端口 (默认443): " new_override_port
+        new_override_port=${new_override_port:-443}
 
-        if [[ $override_port =~ ^[1-9][0-9]{0,4}$ && $override_port -le 65535 ]]; then
-            echo "目标端口: $override_port"
+        if [[ $new_override_port =~ ^[1-9][0-9]{0,4}$ && $new_override_port -le 65535 ]]; then            
+            echo "目标端口: $new_override_port"
             break
         else
             echo -e "${RED}错误：端口范围1-65535，请重新输入！${NC}"
         fi
     done
+    override_port="$new_override_port"
 }
 
 function generate_unique_tag() {
@@ -753,7 +822,7 @@ function generate_unique_tag() {
     done
 }
 
-function override_address() {
+function set_override_address() {
   while true; do
     read -p "请输入目标地址（IP或域名）: " target_address
 
@@ -762,34 +831,13 @@ function override_address() {
       continue
     fi
 
-    if [[ $target_address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      if [[ $(grep -o '\.' <<< "$target_address" | wc -l) -eq 3 ]]; then
-        break
-      else
-        echo -e "${RED}错误：请输入有效的 IPv4 地址！${NC}"
-      fi
-    elif [[ $target_address =~ ^[a-fA-F0-9:]+$ ]]; then
-      if [[ $(grep -o ':' <<< "$target_address" | wc -l) -ge 2 ]]; then
-        break
-      else
-        echo -e "${RED}错误：请输入有效的 IPv6 地址！${NC}"
-      fi
+    if ( [[ $target_address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ $(grep -o '\.' <<< "$target_address" | wc -l) -eq 3 ]] ) || ( [[ $target_address =~ ^[a-fA-F0-9:]+$ ]] && [[ $(grep -o ':' <<< "$target_address" | wc -l) -ge 2 ]] ); then
+      break
     else
       resolved_ips=$(host -t A "$target_address" | awk '/has address/ { print $4 }')
 
-      if [[ -n "$resolved_ips" ]]; then
-        valid_ip=0
-        for ip in $resolved_ips; do
-          if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            valid_ip=1
-            break
-          fi
-        done
-        if [[ $valid_ip -eq 1 ]]; then
-          break
-        else
-          echo -e "${RED}错误：域名未解析为有效的 IPv4 地址，请重新输入！${NC}"
-        fi
+      if [[ -n "$resolved_ips" ]] && ( [[ "$resolved_ips" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$resolved_ips" =~ ^[a-fA-F0-9:]+$ ]] ); then
+        break
       else
         echo -e "${RED}错误：请输入有效的 IP 地址或域名！${NC}"
       fi
@@ -797,14 +845,16 @@ function override_address() {
   done
 }
 
-function generate_server_name() {
+function set_server_name() {
     while true; do
-        read -p "请输入可用的 serverName 列表 (默认为 nijigen-works.jp): " user_input
+        read -p "请输入可用的 ServerName 列表 (默认为 nijigen-works.jp): " user_input
         if [[ -z "$user_input" ]]; then
             server_name="nijigen-works.jp"
+            echo "ServerName：$server_name"
             break
         else
             server_name="$user_input"
+            echo "ServerName：$server_name"
             echo "Verifying server's TLS version support..."
 
             if command -v openssl >/dev/null 2>&1; then
@@ -826,15 +876,17 @@ function generate_server_name() {
     done
 }
 
-function generate_target_server() {
+function set_target_server() {
     while true; do
         read -p "请输入目标网站地址(默认为 nijigen-works.jp): " user_input
 
         if [[ -z "$user_input" ]]; then
             target_server="nijigen-works.jp"
+            echo "目标网址：$target_server"
             break
         else
             target_server="$user_input"
+            echo "目标网址：$target_server"
             echo "Verifying server's TLS version support..."
 
             if command -v openssl >/dev/null 2>&1; then
@@ -864,9 +916,9 @@ function get_local_ip() {
     local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
 
     if [[ -n "$local_ip_v4" ]]; then
-        echo "$local_ip_v4"
+        ip_v4="$local_ip_v4"
     elif [[ -n "$local_ip_v6" ]]; then
-        echo "$local_ip_v6"
+        ip_v6="$local_ip_v6"
     else
         echo -e "${RED}无法获取本机IP地址！${NC}"
     fi
@@ -875,28 +927,24 @@ function get_local_ip() {
 function get_domain() {
     while true; do
         read -p "请输入域名（关闭Cloudflare代理）： " domain
-
-        local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
-        local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
-
         resolved_ipv4=$(dig +short A "$domain" 2>/dev/null)
         resolved_ipv6=$(dig +short AAAA "$domain" 2>/dev/null)
 
         if [[ -z $domain ]]; then
             echo -e "${RED}错误：域名不能为空，请重新输入！${NC}"
         else
-            if [[ ("$resolved_ipv4" == "$local_ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$local_ip_v6" && ! -z "$resolved_ipv6") ]]; then
+            if [[ ("$resolved_ipv4" == "$ip_v4" && ! -z "$resolved_ipv4") || ("$resolved_ipv6" == "$ip_v6" && ! -z "$resolved_ipv6") ]]; then
                 break
             else
-                if [[ -z "$resolved_ipv4" && -n "$local_ip_v4" ]]; then
+                if [[ -z "$resolved_ipv4" && -n "$ip_v4" ]]; then
                     resolved_ip_v4=$(ping -4 "$domain" -c 1 2>/dev/null | sed '1{s/[^(]*(//;s/).*//;q}')
-                    if [[ ("$resolved_ip_v4" == "$local_ip_v4" && ! -z "$resolved_ip_v4") ]]; then
+                    if [[ ("$resolved_ip_v4" == "$ip_v4" && ! -z "$resolved_ip_v4") ]]; then
                         break
                     fi
                 fi
-                if [[ -z "$resolved_ipv6" && -n "$local_ip_v6" ]]; then
+                if [[ -z "$resolved_ipv6" && -n "$ip_v6" ]]; then
                     resolved_ip_v6=$(ping -6 "$domain" -c 1 2>/dev/null | sed '1{s/[^(]*(//;s/).*//;q}')
-                    if [[ ("$resolved_ip_v6" == "$local_ip_v6" && ! -z "$resolved_ip_v6") ]]; then
+                    if [[ ("$resolved_ip_v6" == "$ip_v6" && ! -z "$resolved_ip_v6") ]]; then
                         break
                     fi
                 fi
@@ -906,7 +954,7 @@ function get_domain() {
     done
 }
    
-function get_fake_domain() {
+function set_fake_domain() {
     while true; do
         read -p "请输入伪装网址（默认: www.fan-2000.com）: " fake_domain
         fake_domain=${fake_domain:-"www.fan-2000.com"}
@@ -920,7 +968,7 @@ function get_fake_domain() {
     done
 }
 
-function set_certificate_and_private_key() {
+function set_certificate_path() {
     while true; do
         read -p "请输入 PEM 证书位置: " certificate_path_input
 
@@ -939,7 +987,9 @@ function set_certificate_and_private_key() {
         certificate_path="$certificate_path_input" 
         break
     done
+}
 
+function set_private_key_path() {
     while true; do
         read -p "请输入 PEM 私钥位置: " private_key_path_input
 
@@ -966,9 +1016,8 @@ function apply_certificate() {
     private_key_path="/etc/ssl/private/"$domain".key"
     local has_ipv4=false
     local ca_servers=("letsencrypt" "zerossl")
-    local local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
 
-    if [[ -n "$local_ip_v4" ]]; then
+    if [[ -n "$ip_v4" ]]; then
         has_ipv4=true
     fi
     
@@ -1012,9 +1061,7 @@ function Reapply_certificates() {
     local tls_info_file="/usr/local/etc/sing-box/tls_info.json"
     local has_ipv4=false
 
-    ipv4_address=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
-
-    if [ -n "$ipv4_address" ]; then
+    if [ -n "$ip_v4" ]; then
         has_ipv4=true
     fi
     if ! command -v acme.sh &>/dev/null; then
@@ -1030,28 +1077,34 @@ function Reapply_certificates() {
             key_path=$(echo "$tls_info" | jq -r '.key_path')
             certificate_path=$(echo "$tls_info" | jq -r '.certificate_path')
             echo "Requesting certificate for $server_name..."
-            if $has_ipv4; then
-                ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone
+            result=$(
+                if $has_ipv4; then
+                    ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone
+                else
+                    ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6
+                fi
+            )
+            if [[ "$result" =~ "BEGIN CERTIFICATE" && "$result" =~ "END CERTIFICATE" ]]; then
+                echo "Certificate for $server_name has already been issued and installed using $ca_server CA."
+                return 0  
             else
-                ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6
+                ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
+                echo "Certificate for $server_name has been applied and installed using $ca_server CA."
             fi
-            ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
-            echo "Certificate for $server_name has been applied and installed using $ca_server CA."
         done
     done
     rm -f "$tls_info_file"
 }
 
 function generate_private_key() {
-    local local_public_key
-    local local_private_key
-
     while true; do
         read -p "请输入私钥 (默认随机生成私钥): " local_private_key
         if [[ -z "$local_private_key" ]]; then
             local keypair_output=$(sing-box generate reality-keypair)
             local_private_key=$(echo "$keypair_output" | awk -F: '/PrivateKey/{gsub(/ /, "", $2); print $2}')
             local_public_key=$(echo "$keypair_output" | awk -F: '/PublicKey/{gsub(/ /, "", $2); print $2}')
+            echo "private_key：$local_private_key"
+            echo "public_key：$local_public_key"
             break
         else
             if [[ "$local_private_key" =~ ^[A-Za-z0-9_\-]{43}$ ]]; then
@@ -1070,65 +1123,7 @@ function generate_private_key() {
     private_key="$local_private_key"
 }
 
-function choose_node_type() {
-    while true; do
-        read -p "请选择节点类型（默认1）：
-1). Vmess+tcp
-2). Vmess+ws
-3). Vmess+grpc       
-4). Vmess+tcp+tls
-5). Vmess+ws+tls 
-6). Vmess+h2+tls
-7). Vmess+grpc+tls                      
-请选择 [1-7]: " node_type
-        if [ -z "$node_type" ]; then
-            node_type="1"
-        fi
-
-        case $node_type in
-            1)
-                transport_removed=true
-                tls_enabled=false
-                break
-                ;;
-            2)
-                transport_removed=false
-                tls_enabled=false
-                break
-                ;;
-            3)
-                transport_removed=false
-                tls_enabled=false
-                break
-                ;;
-            4)
-                transport_removed=true
-                tls_enabled=true
-                break
-                ;; 
-            5)
-                transport_removed=false
-                tls_enabled=true
-                break
-                ;; 
-            6)
-                transport_removed=false
-                tls_enabled=true
-                break
-                ;;
-            7)
-                transport_removed=false
-                tls_enabled=true
-                break
-                ;;                                                                               
-            *)
-                echo -e "${RED}无效的选择，请重新输入！${NC}"
-                ;;
-        esac
-    done
-}
-
-function encryption_method() {
+function select_encryption_method() {
     while true; do
         read -p "请选择加密方式(默认1)：
 1). 2022-blake3-chacha20-poly1305
@@ -1146,50 +1141,50 @@ function encryption_method() {
             1)
                 ss_method="2022-blake3-chacha20-poly1305"
                 ss_password=$(sing-box generate rand --base64 32)
-                shadowtls_password=$(openssl rand -base64 32)
+                shadowtls_password=$(sing-box generate rand --base64 32)
                 break
                 ;;
             2)
                 ss_method="2022-blake3-aes-256-gcm"
                 ss_password=$(sing-box generate rand --base64 32)
-                shadowtls_password=$(openssl rand -base64 32)
+                shadowtls_password=$(sing-box generate rand --base64 32)
                 break
                 ;;                
             3)
                 ss_method="2022-blake3-aes-128-gcm"
                 ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                shadowtls_password=$(sing-box generate rand --base64 16)
                 break
                 ;;
 
             4)
                 ss_method="xchacha20-ietf-poly1305"
                 ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                shadowtls_password=$(sing-box generate rand --base64 16)
                 break
                 ;;
             5)
                 ss_method="chacha20-ietf-poly1305"
                 ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                shadowtls_password=$(sing-box generate rand --base64 16)
                 break
                 ;;
             6)
                 ss_method="aes-256-gcm"
                 ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                shadowtls_password=$(sing-box generate rand --base64 16)
                 break
                 ;;
             7)
                 ss_method="aes-192-gcm"
                 ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                shadowtls_password=$(sing-box generate rand --base64 16)
                 break
                 ;;
             8)
                 ss_method="aes-128-gcm"
                 ss_password=$(sing-box generate rand --base64 16)
-                shadowtls_password=$(openssl rand -base64 16)
+                shadowtls_password=$(sing-box generate rand --base64 16)
                 break
                 ;;                                                                
             *)
@@ -1257,7 +1252,7 @@ function select_outbound() {
     done
 }
 
-function set_congestion_control() {
+function select_congestion_control() {
     local default_congestion_control="bbr"
 
     while true; do
@@ -1329,7 +1324,7 @@ function extract_certificate_and_key_paths() {
     return 0
 }
 
-function ask_certificate_option() {
+function select_certificate_option() {
     local certificate_option
     while true; do
         read -p "请选择证书来源 (默认1)：
@@ -1349,7 +1344,8 @@ function ask_certificate_option() {
             2)
                 echo "You have chosen to use your own certificate."
                 check_firewall_configuration
-                set_certificate_and_private_key
+                set_certificate_path
+                set_private_key_path
                 break
                 ;;
             3)
@@ -1369,7 +1365,65 @@ function ask_certificate_option() {
     done
 }
 
-function select_flow_type() {
+function select_vmess_type() {
+    while true; do
+        read -p "请选择节点类型（默认1）：
+1). Vmess+tcp
+2). Vmess+ws
+3). Vmess+grpc       
+4). Vmess+tcp+tls
+5). Vmess+ws+tls 
+6). Vmess+h2+tls
+7). Vmess+grpc+tls                      
+请选择 [1-7]: " node_type
+        if [ -z "$node_type" ]; then
+            node_type="1"
+        fi
+
+        case $node_type in
+            1)
+                transport_removed=true
+                tls_enabled=false
+                break
+                ;;
+            2)
+                transport_removed=false
+                tls_enabled=false
+                break
+                ;;
+            3)
+                transport_removed=false
+                tls_enabled=false
+                break
+                ;;
+            4)
+                transport_removed=true
+                tls_enabled=true
+                break
+                ;; 
+            5)
+                transport_removed=false
+                tls_enabled=true
+                break
+                ;; 
+            6)
+                transport_removed=false
+                tls_enabled=true
+                break
+                ;;
+            7)
+                transport_removed=false
+                tls_enabled=true
+                break
+                ;;                                                                               
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                ;;
+        esac
+    done
+}
+
+function select_vless_type() {
     while true; do
         read -p "请选择节点类型 (默认1)：
 1). vless+vision+reality
@@ -1400,7 +1454,7 @@ function select_flow_type() {
     done
 }
 
-function prompt_setup_type() {
+function select_trojan_type() {
     while true; do
         read -p "请选择节点类型（默认1）：
 1). trojan+tcp+tls
@@ -1436,288 +1490,300 @@ function prompt_setup_type() {
     done
 }
 
-function add_multiple_shadowtls_users() {
-    local add_multiple_users="Y"
-    
-    while [[ $add_multiple_users == [Yy] ]]; do
-        read -p "是否添加多用户？(Y/N，默认为N): " add_multiple_users
-
-        if [[ $add_multiple_users == [Yy] ]]; then
-            add_shadowtls_user
-        fi
-    done
-}
-
-function configure_short_ids() {
-    local current_length=7 
-
+function set_short_id() {
     while true; do
-        read -p "是否继续添加 short id？(Y/N，默认N): " choice
-        choice=${choice,,}  
-        
-        if [[ "$choice" == "y" ]]; then
-            set_short_id
-            if [[ "$current_length" -ge 2 ]]; then
-                current_length=$((current_length - 1))
-                short_ids+=$',\n            "'$(openssl rand -hex "$current_length")'"'
-            else
-                break
-            fi
-        elif [[ "$choice" == "n" || -z "$choice" ]]; then
+        read -p "请输入 Short_Id (用于区分不同的客户端，默认随机生成): " short_id
+        if [[ -z "$short_id" ]]; then
+            short_id=$(openssl rand -hex 8)
+            echo "Short_Id：$short_id"
+            break
+        elif [[ "$short_id" =~ ^[0-9a-fA-F]{2,16}$ ]]; then
+            echo "Short_Id：$short_id"
             break
         else
-            echo -e "${RED}错误：请输入 'Y' 或 'N'！${NC}"
+            echo "错误：请输入两到八位的十六进制字符串！"
         fi
     done
-    short_ids=${short_ids%,}
+    short_ids+=("$short_id")
+    
+}
+
+function set_short_ids() {
+    while true; do
+        set_short_id
+            
+        for ((i=0; i<${#short_ids[@]}; i++)); do
+            short_id="${short_ids[$i]}"
+        done      
+        
+        read -p "是否继续添加 short id？(Y/N，默认N): " -e choice
+
+        if [[ -z "$choice" ]]; then
+            choice="N"
+        fi
+
+        if [[ "$choice" == "N" || "$choice" == "n" ]]; then
+            short_Ids+="
+            \"$short_id\""
+            break
+        elif [[ "$choice" == "Y" || "$choice" == "y" ]]; then
+            short_Ids+="
+            \"$short_id\","
+            continue
+        else
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
+        fi
+    done
 }
 
 function tuic_multiple_users() {
-    users="[
-        {
-          \"name\": \"$username\",
-          \"uuid\": \"$uuid\",
-          \"password\": \"$password\"
-        }"
-
     while true; do
+        set_user_name
+        set_user_password
+        set_uuid
+
+        for ((i=0; i<${#user_names[@]}; i++)); do
+            user_name="${user_names[$i]}"
+            user_uuid="${user_uuids[$i]}"
+            user_password="${user_passwords[$i]}"
+        done         
+        
         read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
 
         if [[ -z "$add_multiple_users" ]]; then
             add_multiple_users="N"
         fi
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            set_username
-            set_password
-            generate_uuid
-            users+=",
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
         {
-          \"name\": \"$username\",
-          \"uuid\": \"$uuid\",
-          \"password\": \"$password\"
+          \"name\": \"$user_name\",
+          \"uuid\": \"$user_uuid\",
+          \"password\": \"$user_password\"
         }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"name\": \"$user_name\",
+          \"uuid\": \"$user_uuid\",
+          \"password\": \"$user_password\"
+        },"
+            continue
         else
             echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
-
-    users+=$'\n      ]'
-}
-
-function naive_multiple_users() {
-    users="[
-        {
-          \"username\": \"$username\",
-          \"password\": \"$password\"
-        }"
-
-    while true; do
-        read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
-
-        if [[ -z "$add_multiple_users" ]]; then
-            add_multiple_users="N"
-        fi
-
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            set_username
-            set_password
-            users+=",
-        {
-          \"username\": \"$username\",
-          \"password\": \"$password\"
-        }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
-            break
-        else
-            echo -e "${RED}无效的输入，请重新输入！${NC}"
-        fi
-    done
-
-    users+=$'\n      ]'
 }
 
 function vmess_multiple_users() {
-    users="[
-        {
-          \"uuid\": \"$uuid\",
-          \"alterId\": 0
-        }"
-
     while true; do
+        set_uuid
+
+        for ((i=0; i<${#user_uuids[@]}; i++)); do
+            user_uuid="${user_uuids[$i]}"
+        done         
+        
         read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
 
         if [[ -z "$add_multiple_users" ]]; then
             add_multiple_users="N"
         fi
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            generate_uuid
-            users+=",
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
         {
-          \"uuid\": \"$uuid\",
+          \"uuid\": \"$user_uuid\",
           \"alterId\": 0
         }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"uuid\": \"$user_uuid\",
+          \"alterId\": 0
+        },"
+            continue
         else
             echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
-
-    users+=$'\n      ]'
 }
 
-function socks_multiple_users() {
-    users="[
-        {
-          \"username\": \"$username\",
-          \"password\": \"$password\"
-        }"
-
+function socks_naive_multiple_users() {    
     while true; do
+        set_user_name
+        set_user_password
+
+        for ((i=0; i<${#user_names[@]}; i++)); do
+            user_name="${user_names[$i]}"
+            user_password="${user_passwords[$i]}"
+        done 
+
         read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
 
         if [[ -z "$add_multiple_users" ]]; then
             add_multiple_users="N"
         fi
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            set_username
-            set_password
-            users+=",
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
         {
-          \"username\": \"$username\",
-          \"password\": \"$password\"
+          \"username\": \"$user_name\",
+          \"password\": \"$user_password\"
         }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"username\": \"$user_name\",
+          \"password\": \"$user_password\"
+        },"
+            continue
         else
             echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
-
-    users+=$'\n      ]'
 }
 
 function hysteria_multiple_users() {
-    users="[
-        {
-          \"name\": \"$username\",
-          \"auth_str\": \"$password\"
-        }"
-
     while true; do
+        set_user_name
+        set_user_password
+
+        for ((i=0; i<${#user_names[@]}; i++)); do
+            user_name="${user_names[$i]}"
+            user_password="${user_passwords[$i]}"
+        done 
+
         read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
 
         if [[ -z "$add_multiple_users" ]]; then
             add_multiple_users="N"
         fi
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            set_username
-            set_password
-            users+=",
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
         {
-          \"name\": \"$username\",
-          \"auth_str\": \"$password\"
+          \"name\": \"$user_name\",
+          \"auth_str\": \"$user_password\"
         }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"name\": \"$user_name\",
+          \"auth_str\": \"$user_password\"
+        },"
+            continue
         else
             echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
-
-    users+=$'\n      ]'
 }
 
 function hy2_multiple_users() {
-    users="[
-        {
-          \"name\": \"$username\",
-          \"password\": \"$password\"
-        }"
-
     while true; do
+        set_user_name
+        set_user_password
+
+        for ((i=0; i<${#user_names[@]}; i++)); do
+            user_name="${user_names[$i]}"
+            user_password="${user_passwords[$i]}"
+        done 
+
         read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
 
         if [[ -z "$add_multiple_users" ]]; then
             add_multiple_users="N"
         fi
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            set_username
-            set_password
-            users+=",
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
         {
-          \"name\": \"$username\",
-          \"password\": \"$password\"
+          \"name\": \"$user_name\",
+          \"password\": \"$user_password\"
         }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"name\": \"$user_name\",
+          \"password\": \"$user_password\"
+        },"
+            continue
         else
             echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
-
-    users+=$'\n      ]'
-}
-
-function add_shadowtls_user() {
-    local user_password=""
-    if [[ $encryption_choice == 1 || $encryption_choice == 2 ]]; then
-        user_password=$(openssl rand -base64 32)
-    elif [[ $encryption_choice == 3 || $encryption_choice == 4 || $encryption_choice == 5 || $encryption_choice == 6 || $encryption_choice == 7 || $encryption_choice == 8 ]]; then
-        user_password=$(openssl rand -base64 16)
-    fi
-
-    local new_user=$(set_username)
-    new_user=${new_user##*: }
-
-    if [[ -n "$users" ]]; then
-        users+=","
-    fi
-
-    users+="
-        {
-          \"name\": \"$new_user\",
-          \"password\": \"$user_password\"
-        }"
-
-    echo "用户名: $new_user"
-    echo "ShadowTLS 密码: $user_password"
 }
 
 function trojan_multiple_users() {
-    users="[
-        {
-          \"password\": \"$password\"
-        }"
-
     while true; do
+        set_user_password
+
+        for ((i=0; i<${#user_passwords[@]}; i++)); do
+            user_password="${user_passwords[$i]}"
+        done 
+
         read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
 
         if [[ -z "$add_multiple_users" ]]; then
             add_multiple_users="N"
         fi
 
-        if [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
-            set_password
-            users+=",
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
         {
-          \"password\": \"$password\"
+          \"password\": \"$user_password\"
         }"
-        elif [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
             break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"password\": \"$user_password\"
+        },"
+            continue
         else
             echo -e "${RED}无效的输入，请重新输入！${NC}"
         fi
     done
+}
 
-    users+=$'\n      ]'
+function shadowtls_multiple_users() {
+    while true; do
+        set_user_name
+        set_stls_password
+
+        for ((i=0; i<${#user_names[@]}; i++)); do
+            user_name="${user_names[$i]}"
+            stls_password="${stls_passwords[$i]}"
+        done 
+
+        read -p "是否继续添加用户？(Y/N，默认N): " -e add_multiple_users
+
+        if [[ -z "$add_multiple_users" ]]; then
+            add_multiple_users="N"
+        fi
+
+        if [[ "$add_multiple_users" == "N" || "$add_multiple_users" == "n" ]]; then
+            users+="
+        {
+          \"name\": \"$user_name\",
+          \"password\": \"$stls_password\"
+        }"
+            break
+        elif [[ "$add_multiple_users" == "Y" || "$add_multiple_users" == "y" ]]; then
+            users+="
+        {
+          \"name\": \"$user_name\",
+          \"password\": \"$stls_password\"
+        },"
+            continue
+        else
+            echo -e "${RED}无效的输入，请重新输入！${NC}"
+        fi
+    done
 }
 
 function generate_vmess_transport_config() {    
@@ -1751,7 +1817,7 @@ function generate_vmess_transport_config() {
     fi
 }
 
-function prompt_and_generate_transport_config() {    
+function generate_trojan_transport_config() {    
     if [[ $setup_type == 2 ]]; then
         read -p "请输入 ws 路径 (默认随机生成): " transport_path_input
         transport_path=${transport_path_input:-/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)}
@@ -1804,7 +1870,7 @@ function generate_tls_config() {
     if [ "$node_type" -ge 4 ] && [ "$node_type" -le 7 ]; then
         tls_enabled=true
         get_domain
-        ask_certificate_option                
+        select_certificate_option                
     else
         tls_enabled=false
     fi
@@ -1824,7 +1890,8 @@ function generate_tls_config() {
 
 function extract_tls_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    jq '[.inbounds[].tls | {server_name: .server_name, certificate_path: .certificate_path, key_path: .key_path}]' "$config_file" > /usr/local/etc/sing-box/tls_info.json
+    local tls_info_file="/usr/local/etc/sing-box/tls_info.json"
+    jq '[.inbounds[].tls | {server_name: .server_name, certificate_path: .certificate_path, key_path: .key_path}]' "$config_file" > "$tls_info_file"
 }
 
 function extract_variables_and_cleanup() {
@@ -1906,11 +1973,12 @@ function generate_ss_config() {
 
 function generate_vmess_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
+    local cert_path="$certificate_path"
+    local key_path="$private_key_path"         
     local tag_label
     generate_unique_tag
-    choose_node_type  
-    listen_port
-    generate_uuid
+    select_vmess_type 
+    set_listen_port  
     vmess_multiple_users     
     generate_vmess_transport_config
     generate_tls_config
@@ -1924,7 +1992,7 @@ function generate_vmess_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true," transport_config ""; print "      \"users\": " users "" tls_config ""; print "    },"; found=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true," transport_config ""; print "      \"users\": [" users ""; print "      ]" tls_config ""; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 } 
@@ -1933,10 +2001,8 @@ function generate_socks_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag
-    listen_port
-    set_username
-    set_password    
-    socks_multiple_users    
+    set_listen_port   
+    socks_naive_multiple_users 
     local found_rules=0
     local found_inbounds=0
     awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v users="$users" '
@@ -1944,7 +2010,7 @@ function generate_socks_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ""; print "    },"; found_inbounds=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": [" users ""; print "      ]"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1953,12 +2019,11 @@ function generate_naive_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag      
-    listen_port
-    set_username
-    set_password    
-    naive_multiple_users
+    set_listen_port  
+    socks_naive_multiple_users
+    get_local_ip
     get_domain    
-    ask_certificate_option
+    select_certificate_option
     local cert_path="$certificate_path"
     local key_path="$private_key_path"  
     local found_rules=0
@@ -1968,7 +2033,7 @@ function generate_naive_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"naive\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"naive\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": [" users ""; print "      ],"; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -1977,14 +2042,12 @@ function generate_tuic_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag  
-    listen_port
-    set_username
-    set_password
-    generate_uuid
+    set_listen_port
     tuic_multiple_users    
-    set_congestion_control
+    select_congestion_control
+    get_local_ip    
     get_domain
-    ask_certificate_option
+    select_certificate_option
     local cert_path="$certificate_path"
     local key_path="$private_key_path"   
     local found_rules=0
@@ -1994,7 +2057,7 @@ function generate_tuic_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": " users ","; print "      \"congestion_control\": \"" congestion_control "\","; print "      \"auth_timeout\": \"3s\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": [" users ""; print "      ],"; print "      \"congestion_control\": \"" congestion_control "\","; print "      \"auth_timeout\": \"3s\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -2003,14 +2066,13 @@ function generate_Hysteria_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag    
-    listen_port
-    read_up_speed
-    read_down_speed
-    set_username
-    set_password    
+    set_listen_port
+    set_up_speed
+    set_down_speed    
     hysteria_multiple_users 
+    get_local_ip      
     get_domain   
-    ask_certificate_option
+    select_certificate_option
     local cert_path="$certificate_path"
     local key_path="$private_key_path"
     local found_rules=0
@@ -2020,24 +2082,23 @@ function generate_Hysteria_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": [" users ""; print "      ],"; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found_inbounds=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
 
 function generate_shadowtls_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local users=""
     local tag_label
     generate_unique_tag
     tag_label1="$tag_label" 
     generate_unique_tag
     tag_label2="$tag_label"  
-    listen_port
-    encryption_method
-    add_shadowtls_user
-    add_multiple_shadowtls_users
-    generate_target_server
+    set_listen_port
+    select_encryption_method
+    shadowtls_multiple_users
+    set_ss_password
+    set_target_server
     local found_rules=0
     local found_inbounds=0
     awk -v tag_label1="$tag_label1" -v tag_label2="$tag_label2" -v listen_port="$listen_port" -v users="$users" -v target_server="$target_server" -v ss_method="$ss_method" -v ss_password="$ss_password" '
@@ -2053,20 +2114,21 @@ function generate_shadowtls_config() {
 function generate_juicity_config() {
     local config_file="/usr/local/etc/juicity/config.json"
     local users="" 
-    listen_port
-    generate_uuid
-    set_password
-    users="\"$uuid\": \"$password\""
-    set_congestion_control
+    set_listen_port
+    set_uuid
+    set_user_password
+    users="\"$user_uuids\": \"$user_passwords\""
+    select_congestion_control
+    get_local_ip      
     get_domain 
-    ask_certificate_option
+    select_certificate_option
     local cert_path="$certificate_path"
     local key_path="$private_key_path"
 
     echo "{
     \"listen\": \":$listen_port\",
     \"users\": {
-$users
+      $users
     },
     \"certificate\": \"$certificate_path\",
     \"private_key\": \"$private_key_path\",
@@ -2077,26 +2139,24 @@ $users
 
 function generate_reality_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local tag_label
-    local lobal_private_key="$private_key"   
+    local tag_label 
     generate_unique_tag    
-    select_flow_type 
-    listen_port   
-    generate_uuid
-    generate_server_name
-    generate_target_server
+    select_vless_type 
+    set_listen_port
+    set_uuid
+    set_server_name
+    set_target_server
     generate_private_key
-    set_short_id
-    configure_short_ids
+    set_short_ids
     generate_vless_transport_config    
     local found_rules=0
     local found_inbounds=0    
-    awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v transport_config="$transport_config" -v server_name="$server_name" -v target_server="$target_server" -v private_key="$private_key" -v short_id="$short_id" -v short_ids="$short_ids" '
+    awk -v tag_label="$tag_label" -v listen_port="$listen_port" -v user_uuids="$user_uuids" -v flow_type="$flow_type" -v transport_config="$transport_config" -v server_name="$server_name" -v target_server="$target_server" -v private_key="$private_key" -v short_Ids="$short_Ids" '
         /"rules": \[/{found_rules=1}
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": ["; print "        {"; print "          \"uuid\": \"" uuid "\","; print "          \"flow\": \"" flow_type "\""; print "        }"; print "      ], " transport_config; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\","; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"handshake\": {"; print "            \"server\": \"" target_server "\","; print "            \"server_port\": 443"; print "          },"; print "          \"private_key\": \"" private_key "\","; print "          \"short_id\": ["; print "            \"" short_id "\"" short_ids; print "          ]"; print "        }"; print "      }"; print "    },"; found=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"users\": ["; print "        {"; print "          \"uuid\": \"" user_uuids "\","; print "          \"flow\": \"" flow_type "\""; print "        }"; print "      ], " transport_config; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\","; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"handshake\": {"; print "            \"server\": \"" target_server "\","; print "            \"server_port\": 443"; print "          },"; print "          \"private_key\": \"" private_key "\","; print "          \"short_id\": [" short_Ids ""; print "          ]"; print "        }"; print "      }"; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -2105,15 +2165,14 @@ function generate_Hy2_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tag_label
     generate_unique_tag      
-    listen_port
-    read_up_speed
-    read_down_speed
-    set_username
-    set_password    
+    set_listen_port
+    set_up_speed
+    set_down_speed    
     hy2_multiple_users
-    get_fake_domain
-    get_domain   
-    ask_certificate_option
+    set_fake_domain
+    get_local_ip      
+    get_domain 
+    select_certificate_option
     local cert_path="$certificate_path"
     local key_path="$private_key_path"
     local found_rules=0
@@ -2123,7 +2182,7 @@ function generate_Hy2_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": " users ","; print "      "; print "      \"ignore_client_bandwidth\": false,"; print "      \"masquerade\": \"https://" fake_domain "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true,"; print "      \"up_mbps\": " up_mbps ","; print "      \"down_mbps\": " down_mbps ","; print "      \"users\": [" users ""; print "      ],"; print "      \"ignore_client_bandwidth\": false,"; print "      \"masquerade\": \"https://" fake_domain "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h3\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 }
@@ -2132,13 +2191,13 @@ function generate_trojan_config() {
     local config_file="/usr/local/etc/sing-box/config.json"    
     local tag_label
     generate_unique_tag
-    prompt_setup_type  
-    listen_port
-    set_password
+    select_trojan_type  
+    set_listen_port
     trojan_multiple_users
-    prompt_and_generate_transport_config         
+    generate_trojan_transport_config        
+    get_local_ip      
     get_domain 
-    ask_certificate_option
+    select_certificate_option
     local cert_path="$certificate_path"
     local key_path="$private_key_path"   
     local found_rules=0
@@ -2148,7 +2207,7 @@ function generate_trojan_config() {
         /"inbounds": \[/{found_inbounds=1}
         {print}
         found_rules && /"rules": \[/{print "      {"; print "        \"inbound\": [\"" tag_label "\"],"; print "        \"outbound\": \"direct\""; print "      },"; found_rules=0}
-        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true," transport_config ""; print "      \"users\": " users ","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
+        found_inbounds && /"inbounds": \[/{print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" tag_label "\","; print "      \"listen\": \"::\","; print "      \"listen_port\": " listen_port ","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": true," transport_config ""; print "      \"users\": [" users ""; print "      ],"; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" domain "\","; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ],"; print "        \"certificate_path\": \"" certificate_path "\","; print "        \"key_path\": \"" private_key_path "\""; print "      }"; print "    },"; found=0}
     ' "$config_file" > "$config_file.tmp"
     mv "$config_file.tmp" "$config_file"
 } 
@@ -2195,7 +2254,7 @@ function write_phone_client_file() {
   local dir="/usr/local/etc/sing-box"
   local phone_client="${dir}/phone_client.json"
   if [ ! -s "${phone_client}" ]; then
-    awk 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"auto\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      }"; print "    ],"; print "    \"strategy\": \"ipv4_only\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"tun\","; print "      \"tag\": \"tun-in\","; print "      \"inet4_address\": \"172.19.0.1/30\","; print "      \"inet6_address\": \"fdfe:dcba:9876::1/126\","; print "      \"mtu\": 9000,"; print "      \"auto_route\": true,"; print "      \"strict_route\": true,"; print "      \"stack\": \"gvisor\","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"urltest\","; print "      \"tag\": \"auto\","; print "      \"outbounds\": ["; print "      ],"; print "      \"url\": \"https://www.gstatic.com/generate_204\","; print "      \"interval\": \"1m\","; print "      \"tolerance\": 50,"; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"selector\","; print "      \"tag\": \"select\","; print "      \"outbounds\": ["; print "        \"auto\""; print "      ],"; print "      \"default\": \"auto\","; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "${phone_client}"
+    awk 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"dns_proxy\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"dns_local\","; print "        \"strategy\": \"ipv4_only\","; print "        \"detour\": \"select\""; print "      },"; print "      {"; print "        \"tag\": \"dns_direct\","; print "        \"address\": \"https://dns.alidns.com/dns-query\","; print "        \"address_resolver\": \"dns_local\","; print "        \"strategy\": \"ipv4_only\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"dns_local\","; print "        \"address\": \"223.5.5.5\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"dns_block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"dns_local\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"dns_block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"dns_direct\""; print "      }"; print "    ]"; print "  },"; print "  \"route\": {"; print "    \"geoip\": {"; print "      \"download_url\": \"https://github.com/soffchen/sing-geoip/releases/latest/download/geoip.db\","; print "      \"download_detour\": \"select\""; print "    },"; print "    \"geosite\": {"; print "      \"download_url\": \"https://github.com/soffchen/sing-geosite/releases/latest/download/geosite.db\","; print "      \"download_detour\": \"select\""; print "    },"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"tun\","; print "      \"tag\": \"tun-in\","; print "      \"inet4_address\": \"172.19.0.1/30\","; print "      \"inet6_address\": \"fdfe:dcba:9876::1/126\","; print "      \"mtu\": 1400,"; print "      \"auto_route\": true,"; print "      \"strict_route\": true,"; print "      \"stack\": \"gvisor\","; print "      \"sniff\": true,"; print "      \"sniff_override_destination\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"urltest\","; print "      \"tag\": \"auto\","; print "      \"outbounds\": ["; print "      ],"; print "      \"url\": \"https://www.gstatic.com/generate_204\","; print "      \"interval\": \"1m\","; print "      \"tolerance\": 50,"; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"selector\","; print "      \"tag\": \"select\","; print "      \"outbounds\": ["; print "        \"auto\""; print "      ],"; print "      \"default\": \"auto\","; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ],"; print "  \"ntp\": {"; print "    \"enabled\": true,"; print "    \"server\": \"time.apple.com\","; print "    \"server_port\": 123,"; print "    \"interval\": \"30m\","; print "    \"detour\": \"direct\""; print "  }"; print "}" }' > "${phone_client}"
   fi    
 }
 
@@ -2203,7 +2262,7 @@ function write_win_client_file() {
   local dir="/usr/local/etc/sing-box"
   local win_client="${dir}/win_client.json"
   if [ ! -s "${win_client}" ]; then
-    awk 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"google\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"local\","; print "        \"detour\": \"auto\""; print "      },"; print "      {"; print "        \"tag\": \"local\","; print "        \"address\": \"https://223.5.5.5/dns-query\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"source_geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"local\""; print "      },"; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"local\""; print "      }"; print "    ],"; print "    \"strategy\": \"ipv4_only\""; print "  },"; print "  \"route\": {"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"mixed\","; print "      \"tag\": \"mixed-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": 1080,"; print "      \"sniff\": true,"; print "      \"set_system_proxy\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"urltest\","; print "      \"tag\": \"auto\","; print "      \"outbounds\": ["; print "      ],"; print "      \"url\": \"https://www.gstatic.com/generate_204\","; print "      \"interval\": \"1m\","; print "      \"tolerance\": 50,"; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"selector\","; print "      \"tag\": \"select\","; print "      \"outbounds\": ["; print "        \"auto\""; print "      ],"; print "      \"default\": \"auto\","; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ]"; print "}" }' > "${win_client}"
+    awk 'BEGIN { print "{"; print "  \"log\": {"; print "    \"disabled\": false,  "; print "    \"level\": \"warn\","; print "    \"timestamp\": true"; print "  },"; print "  \"dns\": {"; print "    \"servers\": ["; print "      {"; print "        \"tag\": \"dns_proxy\","; print "        \"address\": \"https://1.1.1.1/dns-query\","; print "        \"address_resolver\": \"dns_local\","; print "        \"strategy\": \"ipv4_only\","; print "        \"detour\": \"select\""; print "      },"; print "      {"; print "        \"tag\": \"dns_direct\","; print "        \"address\": \"https://dns.alidns.com/dns-query\","; print "        \"address_resolver\": \"dns_local\","; print "        \"strategy\": \"ipv4_only\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"dns_local\","; print "        \"address\": \"223.5.5.5\","; print "        \"detour\": \"direct\""; print "      },"; print "      {"; print "        \"tag\": \"dns_block\","; print "        \"address\": \"rcode://success\""; print "      }"; print "    ],"; print "    \"rules\": ["; print "      {"; print "        \"outbound\": \"any\","; print "        \"server\": \"dns_local\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"server\": \"dns_block\","; print "        \"disable_cache\": true"; print "      },"; print "      {"; print "        \"geosite\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"server\": \"dns_direct\""; print "      }"; print "    ]"; print "  },"; print "  \"route\": {"; print "    \"geoip\": {"; print "      \"download_url\": \"https://github.com/soffchen/sing-geoip/releases/latest/download/geoip.db\","; print "      \"download_detour\": \"select\""; print "    },"; print "    \"geosite\": {"; print "      \"download_url\": \"https://github.com/soffchen/sing-geosite/releases/latest/download/geosite.db\","; print "      \"download_detour\": \"select\""; print "    },"; print "    \"rules\": ["; print "      {"; print "        \"protocol\": \"dns\","; print "        \"outbound\": \"dns-out\""; print "      },"; print "      {"; print "        \"geosite\": \"category-ads-all\","; print "        \"outbound\": \"block\""; print "      },"; print "      {"; print "        \"geosite\": \"cn\","; print "        \"geoip\": ["; print "          \"cn\","; print "          \"private\""; print "        ],"; print "        \"outbound\": \"direct\""; print "      }"; print "    ],"; print "    \"auto_detect_interface\": true"; print "  },"; print "  \"inbounds\": ["; print "    {"; print "      \"type\": \"mixed\","; print "      \"tag\": \"mixed-in\","; print "      \"listen\": \"::\","; print "      \"listen_port\": 1080,"; print "      \"sniff\": true,"; print "      \"set_system_proxy\": false"; print "    }"; print "  ],"; print "  \"outbounds\": ["; print "    {"; print "      \"type\": \"urltest\","; print "      \"tag\": \"auto\","; print "      \"outbounds\": ["; print "      ],"; print "      \"url\": \"https://www.gstatic.com/generate_204\","; print "      \"interval\": \"1m\","; print "      \"tolerance\": 50,"; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"selector\","; print "      \"tag\": \"select\","; print "      \"outbounds\": ["; print "        \"auto\""; print "      ],"; print "      \"default\": \"auto\","; print "      \"interrupt_exist_connections\": false"; print "    },"; print "    {"; print "      \"type\": \"direct\","; print "      \"tag\": \"direct\""; print "    },"; print "    {"; print "      \"type\": \"block\","; print "      \"tag\": \"block\""; print "    },"; print "    {"; print "      \"type\": \"dns\","; print "      \"tag\": \"dns-out\""; print "    }"; print "  ],"; print "  \"ntp\": {"; print "    \"enabled\": true,"; print "    \"server\": \"time.apple.com\","; print "    \"server_port\": 123,"; print "    \"interval\": \"30m\","; print "    \"detour\": \"direct\""; print "  }"; print "}" }' > "${win_client}"
   fi    
 }
 
@@ -2221,7 +2280,7 @@ function write_clash_yaml() {
 
 function write_naive_client_file() {
     local naive_client_file="$naive_client_filename"
-    awk -v naive_client_file="$naive_client_file" 'BEGIN { print "{"; print "  \"listen\":  \"socks://127.0.0.1:1080\","; print "  \"proxy\": \"https://username:password@server_name:listen_port\""; print "}" }' > "$naive_client_file"
+    awk -v naive_client_file="$naive_client_file" 'BEGIN { print "{"; print "  \"listen\":  \"socks://127.0.0.1:1080\","; print "  \"proxy\": \"https://user_name:user_password@server_name:listen_port\""; print "}" }' > "$naive_client_file"
 }
 
 function generate_shadowsocks_win_client_config() {
@@ -2280,8 +2339,8 @@ function generate_tuic_phone_client_config() {
       break
     fi
   done 
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v user_password="$user_password" -v congestion_control="$congestion_control" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuid "\", "; print "      \"password\": \"" user_password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2297,8 +2356,8 @@ function generate_tuic_win_client_config() {
       break
     fi
   done 
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"password\": \"" password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v user_password="$user_password" -v congestion_control="$congestion_control" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"tuic\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuid "\", "; print "      \"password\": \"" user_password "\", "; print "      \"congestion_control\": \""congestion_control"\","; print "      \"udp_relay_mode\": \"native\","; print "      \"zero_rtt_handshake\": false,"; print "      \"heartbeat\": \"10s\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2313,7 +2372,7 @@ function generate_tuic_yaml() {
         break
       fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v password="$password" -v congestion_control="$congestion_control" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    server:", server_name; print "    port:", listen_port; print "    type: tuic"; print "    uuid:", uuid; print "    password:", password; print "    alpn: [h3]"; print "    request-timeout: 8000"; print "    udp-relay-mode: native"; print "    congestion-controller:", congestion_control; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v user_password="$user_password" -v congestion_control="$congestion_control" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    server:", server_name; print "    port:", listen_port; print "    type: tuic"; print "    uuid:", user_uuid; print "    password:", user_password; print "    alpn: [h3]"; print "    request-timeout: 8000"; print "    udp-relay-mode: native"; print "    congestion-controller:", congestion_control; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_socks_win_client_config() {
@@ -2327,8 +2386,8 @@ function generate_socks_win_client_config() {
     fi
   done
   
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";}
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_name="$user_name" -v user_password="$user_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" user_name "\", "; print "      \"password\": \"" user_password "\" "; print "    },";}
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
     {print}' "$win_client_file" > "$win_client_file.tmp"    
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2345,8 +2404,8 @@ function generate_socks_phone_client_config() {
     fi
   done
   
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" username "\", "; print "      \"password\": \"" password "\" "; print "    },";}
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_name="$user_name" -v user_password="$user_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"socks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"username\": \"" user_name "\", "; print "      \"password\": \"" user_password "\" "; print "    },";}
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
     {print}' "$phone_client_file" > "$phone_client_file.tmp" 
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2361,7 +2420,7 @@ function generate_socks_yaml() {
         break
       fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v username="$username" -v password="$password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: socks5"; print "    server:", local_ip; print "    port:", listen_port; print "    username:", username; print "    password:", password; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_name="$user_name" -v user_password="$user_password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: socks5"; print "    server:", local_ip; print "    port:", listen_port; print "    username:", user_name; print "    password:", user_password; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_Hysteria_win_client_config() {
@@ -2374,8 +2433,8 @@ function generate_Hysteria_win_client_config() {
       break
     fi
   done  
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v user_password="$user_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""user_password"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2391,8 +2450,8 @@ function generate_Hysteria_phone_client_config() {
       break
     fi
   done 
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""auth_str"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v user_password="$user_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"auth_str\": \""user_password"\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2407,7 +2466,7 @@ function generate_Hysteria_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v auth_str="$auth_str" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: hysteria"; print "    server:", server_name; print "    port:", listen_port; print "    auth-str:", auth_str; print "    alpn:"; print "      - h3"; print "    protocol: udp"; print "    up: \"" up_mbps " Mbps\""; print "    down: \"" down_mbps " Mbps\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v user_password="$user_password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: hysteria"; print "    server:", server_name; print "    port:", listen_port; print "    auth-str:", user_password; print "    alpn:"; print "      - h3"; print "    protocol: udp"; print "    up: \"" up_mbps " Mbps\""; print "    down: \"" down_mbps " Mbps\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vmess_win_client_config() {
@@ -2423,13 +2482,13 @@ function generate_vmess_win_client_config() {
   done  
   
   if [ "$server_name_in_config" != "null" ]; then
-    awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
+    awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
     {print}' "$win_client_file" > "$win_client_file.tmp"
   else
-    awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
+    awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }
     {print}' "$win_client_file" > "$win_client_file.tmp"       
   fi
@@ -2449,13 +2508,13 @@ function generate_vmess_phone_client_config() {
   done 
   
   if [ "$server_name_in_config" != "null" ]; then
-    awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";}       
+    awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuid "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\" "; print "      },"; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";}       
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }     
     {print}' "$phone_client_file" > "$phone_client_file.tmp"  
   else
-    awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_config="$transport_config" '
-      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
+    awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_config="$transport_config" '
+      /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vmess\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuid "\"," transport_config " "; print "      \"security\": \"auto\","; print "      \"alter_id\": 0,"; print "      \"packet_encoding\": \"xudp\" "; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }      
     {print}' "$phone_client_file" > "$phone_client_file.tmp"
   fi
@@ -2471,7 +2530,7 @@ function generate_vmess_tcp_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", uuid; print "    alterId: 0"; print "    cipher: auto"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_uuid="$user_uuid" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", user_uuid; print "    alterId: 0"; print "    cipher: auto"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vmess_tcp_tls_yaml() {
@@ -2483,7 +2542,7 @@ function generate_vmess_tcp_tls_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", server_name; print "    port:", listen_port; print "    uuid:", uuid; print "    alterId: 0"; print "    cipher: auto"; print "    tls: true"; print "    servername: " server_name; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", server_name; print "    port:", listen_port; print "    uuid:", user_uuid; print "    alterId: 0"; print "    cipher: auto"; print "    tls: true"; print "    servername: " server_name; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vmess_ws_yaml() {
@@ -2495,7 +2554,7 @@ function generate_vmess_ws_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_path="$transport_path" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: ws"; print "    ws-opts:"; print "      path: " transport_path; print "      max-early-data: 2048"; print "      early-data-header-name: Sec-WebSocket-Protocol"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_path="$transport_path" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", user_uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: ws"; print "    ws-opts:"; print "      path: " transport_path; print "      max-early-data: 2048"; print "      early-data-header-name: Sec-WebSocket-Protocol"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vmess_ws_tls_yaml() {
@@ -2507,7 +2566,7 @@ function generate_vmess_ws_tls_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_path="$transport_path" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", server_name; print "    port:", listen_port; print "    uuid:", uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: ws"; print "    tls: true"; print "    servername:", server_name; print "    ws-opts:"; print "      path: " transport_path; print "      max-early-data: 2048"; print "      early-data-header-name: Sec-WebSocket-Protocol"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_path="$transport_path" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", server_name; print "    port:", listen_port; print "    uuid:", user_uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: ws"; print "    tls: true"; print "    servername:", server_name; print "    ws-opts:"; print "      path: " transport_path; print "      max-early-data: 2048"; print "      early-data-header-name: Sec-WebSocket-Protocol"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vmess_grpc_yaml() {
@@ -2519,7 +2578,7 @@ function generate_vmess_grpc_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: grpc"; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", user_uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: grpc"; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vmess_grpc_tls_yaml() {
@@ -2531,7 +2590,7 @@ function generate_vmess_grpc_tls_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", server_name; print "    port:", listen_port; print "    uuid:", uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: grpc"; print "    tls: true"; print "    servername:", server_name; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuid="$user_uuid" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vmess"; print "    server:", server_name; print "    port:", listen_port; print "    uuid:", user_uuid; print "    alterId: 0"; print "    cipher: auto"; print "    network: grpc"; print "    tls: true"; print "    servername:", server_name; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_Hysteria2_phone_client_config() {
@@ -2544,8 +2603,8 @@ function generate_Hysteria2_phone_client_config() {
       break
     fi
   done  
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v user_password="$user_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" user_password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2561,8 +2620,8 @@ function generate_Hysteria2_win_client_config() {
       break
     fi
   done  
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v user_password="$user_password" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"hysteria2\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"up_mbps\": " up_mbps ", "; print "      \"down_mbps\": " down_mbps ", "; print "      \"password\": \"" user_password "\","; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h3\""; print "        ]"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2577,7 +2636,7 @@ function generate_Hysteria2_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v password="$password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: hysteria2"; print "    server:", server_name; print "    port:", listen_port; print "    password:", password; print "    alpn:"; print "      - h3"; print "    skip-cert-verify: false"; print "    up: \"" up_mbps " Mbps\""; print "    down: \"" down_mbps " Mbps\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v up_mbps="$up_mbps" -v down_mbps="$down_mbps" -v user_password="$user_password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: hysteria2"; print "    server:", server_name; print "    port:", listen_port; print "    password:", user_password; print "    alpn:"; print "      - h3"; print "    skip-cert-verify: false"; print "    up: \"" up_mbps " Mbps\""; print "    down: \"" down_mbps " Mbps\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vless_win_client_config() {
@@ -2590,8 +2649,8 @@ function generate_vless_win_client_config() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuids="$user_uuids" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuids "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$win_client_file" > "$win_client_file.tmp"  
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2607,8 +2666,8 @@ function generate_vless_phone_client_config() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" uuid "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuids="$user_uuids" -v flow_type="$flow_type" -v public_key="$public_key" -v short_id="$short_id" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"vless\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"uuid\": \"" user_uuids "\", "; print "      \"flow\": \"" flow_type "\"," transport_config ""; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\""; print "        },"; print "        \"reality\": {"; print "          \"enabled\": true,"; print "          \"public_key\": \"" public_key "\","; print "          \"short_id\": \"" short_id "\""; print "        }"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$phone_client_file" > "$phone_client_file.tmp"  
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2623,7 +2682,7 @@ function generate_vless_reality_vision_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v public_key="$public_key" -v short_id="$short_id" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vless"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", uuid; print "    network: tcp"; print "    udp: true"; print "    tls: true"; print "    flow: xtls-rprx-vision"; print "    servername:", server_name; print "    reality-opts:"; print "      public-key:", public_key; print "      short-id:", short_id; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuids="$user_uuids" -v public_key="$public_key" -v short_id="$short_id" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vless"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", user_uuids; print "    network: tcp"; print "    udp: true"; print "    tls: true"; print "    flow: xtls-rprx-vision"; print "    servername:", server_name; print "    reality-opts:"; print "      public-key:", public_key; print "      short-id:", short_id; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_vless_reality_grpc_yaml() {
@@ -2635,7 +2694,7 @@ function generate_vless_reality_grpc_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v uuid="$uuid" -v public_key="$public_key" -v short_id="$short_id" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vless"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", uuid; print "    network: grpc"; print "    udp: true"; print "    tls: true"; print "    flow: "; print "    servername:", server_name; print "    reality-opts:"; print "      public-key:", public_key; print "      short-id:", short_id; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v local_ip="$local_ip" -v server_name="$server_name" -v listen_port="$listen_port" -v user_uuids="$user_uuids" -v public_key="$public_key" -v short_id="$short_id" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: vless"; print "    server:", local_ip; print "    port:", listen_port; print "    uuid:", user_uuids; print "    network: grpc"; print "    udp: true"; print "    tls: true"; print "    flow: "; print "    servername:", server_name; print "    reality-opts:"; print "      public-key:", public_key; print "      short-id:", short_id; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_trojan_phone_client_config() {
@@ -2648,8 +2707,8 @@ function generate_trojan_phone_client_config() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_config="$transport_config" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_password="$user_password" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" user_password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} 
    /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$phone_client_file" > "$phone_client_file.tmp"  
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2665,8 +2724,8 @@ function generate_trojan_win_client_config() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_config="$transport_config" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} 
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_password="$user_password" -v transport_config="$transport_config" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"trojan\","; print "      \"tag\": \"" proxy_name "\","; print "      \"server\": \"" server_name "\", "; print "      \"server_port\": " listen_port ","; print "      \"password\": \"" user_password "\"," transport_config " "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" server_name "\", "; print "        \"alpn\": ["; print "          \"h2\","; print "          \"http/1.1\""; print "        ]"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$win_client_file" > "$win_client_file.tmp"  
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2681,7 +2740,7 @@ function generate_trojan_tcp_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: trojan"; print "    server:", server_name; print "    port:", listen_port; print "    password:", password; print "    udp: true"; print "    sni:", server_name; print "    alpn:"; print "      - h2"; print "      - http/1.1"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_password="$user_password" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: trojan"; print "    server:", server_name; print "    port:", listen_port; print "    password:", user_password; print "    udp: true"; print "    sni:", server_name; print "    alpn:"; print "      - h2"; print "      - http/1.1"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_trojan_ws_yaml() {
@@ -2693,7 +2752,7 @@ function generate_trojan_ws_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_path="$transport_path" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: trojan"; print "    server:", server_name; print "    port:", listen_port; print "    password:", "\"" password "\""; print "    network: ws"; print "    sni:", server_name; print "    udp: true"; print "    ws-opts:"; print "      path:", transport_path; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_password="$user_password" -v transport_path="$transport_path" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: trojan"; print "    server:", server_name; print "    port:", listen_port; print "    password:", "\"" user_password "\""; print "    network: ws"; print "    sni:", server_name; print "    udp: true"; print "    ws-opts:"; print "      path:", transport_path; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_trojan_grpc_yaml() {
@@ -2705,7 +2764,7 @@ function generate_trojan_grpc_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v password="$password" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: trojan"; print "    server:", server_name; print "    port:", listen_port; print "    password:", "\"" password "\""; print "    network: grpc"; print "    sni:", server_name; print "    udp: true"; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v server_name="$server_name" -v listen_port="$listen_port" -v user_password="$user_password" -v transport_service_name="$transport_service_name" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: trojan"; print "    server:", server_name; print "    port:", listen_port; print "    password:", "\"" user_password "\""; print "    network: grpc"; print "    sni:", server_name; print "    udp: true"; print "    grpc-opts:"; print "      grpc-service-name:", "\"" transport_service_name "\""; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_shadowtls_win_client_config() {
@@ -2720,8 +2779,8 @@ while true; do
     break
   fi
 done
-  awk -v shadowtls_out="$shadowtls_out" -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"" shadowtls_out "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" shadowtls_out "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} 
+  awk -v shadowtls_out="$shadowtls_out" -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v stls_password="$stls_password" -v user_input="$user_input" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"" shadowtls_out "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" shadowtls_out "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""stls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$win_client_file" > "$win_client_file.tmp"
   mv "$win_client_file.tmp" "$win_client_file"
@@ -2739,8 +2798,8 @@ function generate_shadowtls_phone_client_config() {
       break
     fi
   done 
-  awk -v shadowtls_out="$shadowtls_out" -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '
-    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"" shadowtls_out "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" shadowtls_out "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""shadowtls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} 
+  awk -v shadowtls_out="$shadowtls_out" -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v stls_password="$stls_password" -v user_input="$user_input" '
+    /^  "outbounds": \[/ {print; getline; print "    {"; print "      \"type\": \"shadowsocks\","; print "      \"tag\": \"" proxy_name "\","; print "      \"method\": \"" method "\", "; print "      \"password\": \"" ss_password "\","; print "      \"detour\": \"" shadowtls_out "\", "; print "      \"multiplex\": {"; print "        \"enabled\": true,"; print "        \"max_connections\": 4,"; print "        \"min_streams\": 4 "; print "      }"; print "    },"; print "    {"; print "      \"type\": \"shadowtls\","; print "      \"tag\": \"" shadowtls_out "\","; print "      \"server\": \"" local_ip "\", "; print "      \"server_port\": " listen_port ","; print "      \"version\": 3, "; print "      \"password\": \""stls_password"\", "; print "      \"tls\": {"; print "        \"enabled\": true,"; print "        \"server_name\": \"" user_input "\", "; print "        \"utls\": {"; print "          \"enabled\": true,"; print "          \"fingerprint\": \"chrome\" "; print "        }"; print "      }"; print "    },";} 
     /^      "outbounds": \[/ {print; getline; if ($0 ~ /^      \],$/) {print "        \"" proxy_name "\""} else {print "        \"" proxy_name "\", "} }    
     {print}' "$phone_client_file" > "$phone_client_file.tmp"
   mv "$phone_client_file.tmp" "$phone_client_file"
@@ -2755,19 +2814,12 @@ function generate_shadowtls_yaml() {
       break
     fi
   done
-  awk -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v shadowtls_password="$shadowtls_password" -v user_input="$user_input" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: ss"; print "    server:", local_ip; print "    port:", listen_port; print "    cipher:", method; print "    password:", "\"" ss_password "\""; print "    plugin: shadow-tls"; print "    plugin-opts:"; print "      host: \"" user_input "\""; print "      password:", "\"" shadowtls_password "\""; print "      version: 3"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
+  awk -v proxy_name="$proxy_name" -v method="$method" -v ss_password="$ss_password" -v local_ip="$local_ip" -v listen_port="$listen_port" -v stls_password="$stls_password" -v user_input="$user_input" '/^proxies:$/ {print; print "  - name: " proxy_name; print "    type: ss"; print "    server:", local_ip; print "    port:", listen_port; print "    cipher:", method; print "    password:", "\"" ss_password "\""; print "    plugin: shadow-tls"; print "    plugin-opts:"; print "      host: \"" user_input "\""; print "      password:", "\"" stls_password "\""; print "      version: 3"; next} /- name: Proxy/ { print; flag_proxy=1; next } flag_proxy && flag_proxy++ == 3 { print "      - " proxy_name } /- name: auto/ { print; flag_auto=1; next } flag_auto && flag_auto++ == 3 { print "      - " proxy_name } 1' "$filename" > temp_file && mv temp_file "$filename"
 }
 
 function generate_naive_win_client_config() {
     local naive_client_file="$naive_client_filename"
-    local username="$1"
-    local password="$2"
-    local listen_port="$3"
-    local server_name="$4"
-    sed -i "s/username/$username/" "$naive_client_file"
-    sed -i "s/password/$password/" "$naive_client_file"
-    sed -i "s/listen_port/$listen_port/" "$naive_client_file"
-    sed -i "s/server_name/$server_name/" "$naive_client_file"
+    sed -i -e "s,user_name,$user_name," -e "s,user_password,$user_password," -e "s,listen_port,$listen_port," -e "s,server_name,$server_name," "$naive_client_file"
     echo "电脑端配置文件已保存至$naive_client_file，请下载后使用！"
 }
 
@@ -2775,18 +2827,21 @@ function display_naive_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt" 
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                                \(.password)"' "$config_file")  
+    local num_users=${#user_names[@]}     
     echo -e "${CYAN}NaiveProxy 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "服务器地址: $server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"        
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"        
     echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "用 户 名                                  密  码"  | tee -a "$output_file"
-    echo "----------------------------------------------------------------"  | tee -a "$output_file"
-    echo "$users"  | tee -a "$output_file" 
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"
+    for ((i=0; i<num_users; i++)); do
+        local user_name="${user_names[i]}"
+        local user_password="${user_passwords[i]}"       
+        printf "%-38s %s\n" "$user_name" "$user_password" | tee -a "$output_file"
+    done      
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file" 
 }
 
@@ -2794,37 +2849,35 @@ function generate_naive_config_files() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local naive_client_file="$naive_client_filename"  
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                                \(.password)"' "$config_file")   
-    IFS=$'\n'
-    for user_info in $users; do
-        local username=$(echo "$user_info" | awk '{print $1}')
-        local password=$(echo "$user_info" | awk '{print $2}')        
+    local num_users=${#user_names[@]}     
+    for ((i=0; i<num_users; i++)); do
+        local user_name="${user_names[i]}"
+        local user_password="${user_passwords[i]}"        
         generate_naive_random_filename
         write_naive_client_file
-        generate_naive_win_client_config "$username" "$password" "$listen_port" "$server_name"        
+        generate_naive_win_client_config "$user_name" "$user_password" "$listen_port" "$server_name"        
     done
-    unset IFS
 }
 
 function display_Direct_config() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"    
-    local local_ip
-    local_ip=$(get_local_ip)
-    local override_address=$(jq -r '.inbounds[0].override_address' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local override_port=$(jq -r '.inbounds[0].override_port' "$config_file")  
+    local output_file="/usr/local/etc/sing-box/output.txt"
+    local override_address=$(jq -r '.inbounds[0].override_address' "$config_file")    
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi  
     echo -e "${CYAN}Direct 节点配置信息：${NC}" | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "中转地址: $local_ip" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "监听端口: $listen_port" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "目标地址: $override_address" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "目标端口: $override_port" | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"        
 }
 
@@ -2835,14 +2888,13 @@ function display_juicity_config() {
     local UUIDS=$(jq -r '.users | to_entries[] | "UUID: \(.key)\t密码: \(.value)"' "$config_file")
     local congestion_control=$(jq -r '.congestion_control' "$config_file")  
     echo -e "${CYAN}juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"  
     echo "监听端口: $listen_port"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
-    echo "UUID和密码:"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
     echo "$UUIDS"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "拥塞控制算法: $congestion_control"  | tee -a "$output_file" 
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "配置信息已保存至 $output_file"    
 }
 
@@ -2850,26 +2902,29 @@ function display_tuic_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"   
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")     
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[] | "\(.name)     \(.uuid)     \(.password)"' "$config_file")
     local congestion_control=$(jq -r '.inbounds[0].congestion_control' "$config_file")
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")    
     echo -e "${CYAN}TUIC 节点配置信息：${NC}"  | tee -a "$output_file"     
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"  
     echo "服务器地址: $server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"      
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"      
     echo "监听端口: $listen_port"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
     echo "用户密码列表:"  | tee -a "$output_file" 
-    echo "------------------------------------------------------------------"  | tee -a "$output_file"
-    echo "  用户名                    UUID                           密码"  | tee -a "$output_file" 
-    echo "------------------------------------------------------------------"  | tee -a "$output_file" 
-    echo "$users"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"
+    echo "  用户名                    UUID                             密码"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file" 
+    for ((i=0; i<${#user_names[@]}; i++)); do
+        user_name="${user_names[$i]}"
+        user_uuid="${user_uuids[$i]}"
+        user_password="${user_passwords[$i]}"
+        printf "%-13s %-42s %s\n" "$user_name" "$user_uuid" "$user_password" | tee -a "$output_file"
+    done 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "拥塞控制算法: $congestion_control"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "ALPN: $alpn"  | tee -a "$output_file"     
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "配置信息已保存至 $output_file" 
 }
 
@@ -2879,19 +2934,16 @@ function display_tuic_config_files() {
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
     local win_client_file="/usr/local/etc/sing-box/win_client.json"     
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")     
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[] | "\(.name)     \(.uuid)     \(.password)"' "$config_file")
     local congestion_control=$(jq -r '.inbounds[0].congestion_control' "$config_file")
-    local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")    
-    local IFS=$'\n'
-    local user_array=($(echo "$users"))
-    unset IFS
-    for user_info in "${user_array[@]}"; do
-        IFS=' ' read -r username uuid password <<< "$user_info"
+    local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
+    local num_users=${#user_uuids[@]} 
+    for ((i=0; i<num_users; i++)); do
+        local user_uuid="${user_uuids[i]}"
+        local user_password="${user_passwords[i]}"   
         write_phone_client_file
         write_win_client_file        
-        generate_tuic_win_client_config "$uuid" "$password"
-        generate_tuic_phone_client_config "$uuid" "$password"
+        generate_tuic_win_client_config "$user_uuid" "$user_password"
+        generate_tuic_phone_client_config "$user_uuid" "$user_password"
         ensure_clash_yaml
         write_clash_yaml
         generate_tuic_yaml
@@ -2904,21 +2956,22 @@ function display_tuic_config_files() {
 function display_Shadowsocks_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"        
-    local local_ip
-    local_ip=$(get_local_ip)
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
-    local ss_password=$(jq -r '.inbounds[0].password' "$config_file")  
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi 
     echo -e "${CYAN}Shadowsocks 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "服务器地址: $local_ip"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "加密方式: $ss_method"  | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "密码: $ss_password"  | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "密码: $ss_passwords"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"  
 }
 
@@ -2927,11 +2980,12 @@ function display_Shadowsocks_config_files() {
     local clash_file="/usr/local/etc/sing-box/clash.yaml" 
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
     local win_client_file="/usr/local/etc/sing-box/win_client.json"         
-    local local_ip
-    local_ip=$(get_local_ip)
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
     local ss_method=$(jq -r '.inbounds[0].method' "$config_file")
-    local ss_password=$(jq -r '.inbounds[0].password' "$config_file")  
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi 
     write_phone_client_file
     write_win_client_file
     generate_shadowsocks_win_client_config
@@ -2947,46 +3001,52 @@ function display_Shadowsocks_config_files() {
 function display_socks_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"        
-    local local_ip
-    local_ip=$(get_local_ip)   
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")         
-    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                \(.password)"' "$config_file") 
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi  
     echo -e "${CYAN}SOCKS 节点配置信息：${NC}"  | tee -a "$output_file"     
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"  
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"  
     echo "服务器地址: $local_ip"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"      
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"      
     echo "监听端口: $listen_port"  | tee -a "$output_file" 
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"  
     echo "用户密码列表:"  | tee -a "$output_file" 
-    echo "------------------------------------------------------------------"  | tee -a "$output_file"
-    echo "  用户名                    密码"  | tee -a "$output_file" 
-    echo "------------------------------------------------------------------"  | tee -a "$output_file" 
-    echo "$users"  | tee -a "$output_file" 
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
-    echo "配置信息已保存至 $output_file"    
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"
+    echo "  用户名                               密码"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"
+    for ((i=0; i<${#user_names[@]}; i++)); do
+        user_name="${user_names[$i]}"
+        user_password="${user_passwords[$i]}"
+        printf "%-35s %s\n" "$user_name" "$user_password" | tee -a "$output_file"
+    done 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
+    echo "节点配置信息已保存至 $output_file"    
 }
 
 function display_socks_config_files() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local clash_file="/usr/local/etc/sing-box/clash.yaml" 
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
-    local win_client_file="/usr/local/etc/sing-box/win_client.json"           
-    local local_ip
-    local_ip=$(get_local_ip)   
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")         
-    local users=$(jq -r '.inbounds[0].users[] | "\(.username)                \(.password)"' "$config_file") 
-    local IFS=$'\n'
-    local user_array=($(echo "$users"))
-    unset IFS
-    for user_info in "${user_array[@]}"; do
-        IFS=' ' read -r username password <<< "$user_info"
-        write_phone_client_file
-        write_win_client_file        
-        generate_socks_win_client_config "$username" "$password"
-        generate_socks_phone_client_config "$username" "$password"
-        ensure_clash_yaml
-        write_clash_yaml
-        generate_socks_yaml         
+    local win_client_file="/usr/local/etc/sing-box/win_client.json" 
+    local num_users=${#user_names[@]}            
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi  
+
+    for ((i=0; i<num_users; i++)); do
+      local user_name="${user_names[i]}"
+      local user_password="${user_passwords[i]}"    
+      write_phone_client_file
+      write_win_client_file
+      generate_socks_win_client_config "$user_name" "$user_password"
+      generate_socks_phone_client_config "$user_name" "$user_password"
+      ensure_clash_yaml
+      write_clash_yaml
+      generate_socks_yaml   
     done
     echo "手机端配置文件已保存至$phone_client_file，请下载后使用！"
     echo "电脑端配置文件已保存至$win_client_file，请下载后使用！"
@@ -2999,24 +3059,25 @@ function display_Hysteria_config_info() {
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
     echo -e "${CYAN}Hysteria 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}======================================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "服务器地址：$server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "监听端口：$listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "上行速度：${up_mbps}Mbps"  | tee -a "$output_file"
-    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "下行速度：${down_mbps}Mbps"  | tee -a "$output_file"
-    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "ALPN：$alpn"  | tee -a "$output_file"
-    echo -e "${CYAN}--------------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
-    echo "用户密码："
-    local user_count=$(echo "$users" | jq length)    
-    for ((i = 0; i < user_count; i++)); do
-        local auth_str=$(echo "$users" | jq -r ".[$i].auth_str")
-        echo "用户$i: $auth_str"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "  用户名                               密码"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"    
+    for ((i=0; i<${#user_names[@]}; i++)); do
+        user_name="${user_names[$i]}"
+        user_password="${user_passwords[$i]}"
+        printf "%-35s %s\n" "$user_name" "$user_password" | tee -a "$output_file"
     done
-    echo -e "${CYAN}======================================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "配置信息已保存至 $output_file"   
 }
 
@@ -3027,13 +3088,12 @@ function display_Hysteria_config_files() {
     local win_client_file="/usr/local/etc/sing-box/win_client.json"         
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
-    local user_count=$(echo "$users" | jq length)     
-    for ((i = 0; i < user_count; i++)); do
-        local auth_str=$(echo "$users" | jq -r ".[$i].auth_str")
+    for ((i=0; i<${#user_passwords[@]}; i++)); do
+        user_password="${user_passwords[$i]}"
         write_phone_client_file
         write_win_client_file
-        generate_Hysteria_win_client_config "$auth_str"
-        generate_Hysteria_phone_client_config "$auth_str"
+        generate_Hysteria_win_client_config "$user_password"
+        generate_Hysteria_phone_client_config "$user_password"
         ensure_clash_yaml
         write_clash_yaml
         generate_Hysteria_yaml          
@@ -3049,24 +3109,25 @@ function display_Hy2_config_info() {
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
     echo -e "${CYAN}Hysteria2 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "服务器地址：$server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "监听端口：$listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "上行速度：${up_mbps}Mbps"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "下行速度：${down_mbps}Mbps"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
     echo "ALPN：$alpn"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
-    echo "用户密码："
-    local user_count=$(echo "$users" | jq length)
-    for ((i = 0; i < user_count; i++)); do
-        local password=$(echo "$users" | jq -r ".[$i].password")
-        echo "用户$i: $password"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file" 
+    echo "  用户名                               密码"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"    
+    for ((i=0; i<${#user_names[@]}; i++)); do
+        user_name="${user_names[$i]}"
+        user_password="${user_passwords[$i]}"
+        printf "%-35s %s\n" "$user_name" "$user_password" | tee -a "$output_file"
     done
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "配置信息已保存至 $output_file"       
 }
 
@@ -3077,13 +3138,12 @@ function display_Hy2_config_files() {
     local win_client_file="/usr/local/etc/sing-box/win_client.json"          
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")      
     local alpn=$(jq -r '.inbounds[0].tls.alpn[0]' "$config_file")
-    local user_count=$(echo "$users" | jq length)    
-    for ((i = 0; i < user_count; i++)); do
-        local password=$(echo "$users" | jq -r ".[$i].password")
+    for ((i=0; i<${#user_passwords[@]}; i++)); do
+        user_password="${user_passwords[$i]}"
         write_phone_client_file
         write_win_client_file
-        generate_Hysteria2_win_client_config "$password"
-        generate_Hysteria2_phone_client_config "$password"
+        generate_Hysteria2_win_client_config "$user_password"
+        generate_Hysteria2_phone_client_config "$user_password"
         ensure_clash_yaml
         write_clash_yaml
         generate_Hysteria2_yaml          
@@ -3095,11 +3155,7 @@ function display_Hy2_config_files() {
 
 function display_reality_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"          
-    local local_ip
-    local_ip=$(get_local_ip)       
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
+    local output_file="/usr/local/etc/sing-box/output.txt"
     local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
     local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
@@ -3107,19 +3163,24 @@ function display_reality_config_info() {
     local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
     local lobal_public_key="$public_key" 
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi      
     if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
         transport_type="tcp"
     fi
     echo -e "${CYAN}Vless+Reality 节点配置信息：${NC}" | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "服务器地址: $local_ip" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "监听端口: $listen_port" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    echo "用户 UUID：  $users" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo "用户 UUID：  $user_uuids" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "流控类型: $flow_type" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     if [ "$transport_type" == "grpc" ]; then
         echo "传输协议: $transport_type" | tee -a "$output_file"
         echo "grpc-service-name: $transport_service_name" | tee -a "$output_file"
@@ -3128,16 +3189,16 @@ function display_reality_config_info() {
     else
         echo "传输协议: $transport_type" | tee -a "$output_file"
     fi
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "ServerName: $server_name" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "目标网站地址: $target_server" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "Short ID:" | tee -a "$output_file"
     echo "$short_ids" | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "PublicKey: $public_key" | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"     
 }
 
@@ -3145,18 +3206,19 @@ function display_reality_config_files() {
     local config_file="/usr/local/etc/sing-box/config.json" 
     local clash_file="/usr/local/etc/sing-box/clash.yaml" 
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
-    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
-    local local_ip
-    local_ip=$(get_local_ip)       
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local users=$(jq -r '.inbounds[0].users[].uuid' "$config_file")
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"
     local flow_type=$(jq -r '.inbounds[0].users[0].flow' "$config_file")
     local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
     local target_server=$(jq -r '.inbounds[0].tls.reality.handshake.server' "$config_file")
     local short_ids=$(jq -r '.inbounds[0].tls.reality.short_id[]' "$config_file")
-    local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
-    local lobal_public_key="$public_key" 
+    local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")  
+    local lobal_public_key="$public_key"
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi      
     for short_id in $short_ids; do   
         write_phone_client_file
         write_win_client_file
@@ -3184,29 +3246,32 @@ function display_reality_config_files() {
 function display_vmess_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"         
-    local local_ip
-    local_ip=$(get_local_ip)
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local UUIDS=($(jq -r '.inbounds[0].users[].uuid' "$config_file"))
     local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
     local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")  
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")   
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi      
     echo -e "${CYAN}Vmess 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"    
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"    
     if [ -n "$server_name" ] && [ "$server_name" != "null" ]; then
         echo "服务器地址: $server_name"  | tee -a "$output_file"
     else
         echo "服务器地址: $local_ip"  | tee -a "$output_file"
     fi    
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"    
-    for ((i = 0; i < ${#UUIDS[@]}; i++)); do
-        local uuid="${UUIDS[i]}"
-        echo -e "密码 $i: $uuid"  | tee -a "$output_file"
-    done    
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"    
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"    
+    echo "UUID列表:"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file"
+    for ((i=0; i<${#user_uuids[@]}; i++)); do
+        user_uuid="${user_uuids[$i]}"
+        echo "$user_uuid"| tee -a "$output_file"
+    done  
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"    
     if [ "$transport_type" != "null" ]; then
         echo "传输协议: $transport_type"  | tee -a "$output_file"
         if [ "$transport_type" == "ws" ]; then
@@ -3218,7 +3283,7 @@ function display_vmess_config_info() {
         echo "传输协议: tcp"  | tee -a "$output_file"
     fi
        
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"  
 }
 
@@ -3227,18 +3292,18 @@ function display_vmess_config_files() {
     local clash_file="/usr/local/etc/sing-box/clash.yaml" 
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
     local win_client_file="/usr/local/etc/sing-box/win_client.json"          
-    local local_ip
-    local_ip=$(get_local_ip)
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local UUIDS=($(jq -r '.inbounds[0].users[].uuid' "$config_file"))
     local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
     local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")  
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")   
     local show_clash_message=true
-
-    for ((i = 0; i < ${#UUIDS[@]}; i++)); do
-        local uuid="${UUIDS[i]}" 
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi     
+    for ((i=0; i<${#user_uuids[@]}; i++)); do
+        user_uuid="${user_uuids[$i]}"
         write_phone_client_file
         write_win_client_file
         generate_vmess_win_client_config
@@ -3287,23 +3352,21 @@ function display_trojan_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local output_file="/usr/local/etc/sing-box/output.txt"          
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
     local alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
     local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
     local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
     echo -e "${CYAN}trojan 节点配置信息：${NC}"  | tee -a "$output_file"
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file" 
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "服务器地址: $server_name"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     echo "监听端口: $listen_port"  | tee -a "$output_file"
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
-    for ((i = 0; i < ${#passwords[@]}; i++)); do
-        local password="${passwords[i]}" 
-        echo -e "密码 $i: $password"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    for ((i = 0; i < ${#user_passwords[@]}; i++)); do
+        local user_password="${user_passwords[i]}" 
+        echo -e "密码 $i: $user_password"  | tee -a "$output_file"
     done    
-    echo -e "${CYAN}------------------------------------------------------------------${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
     if [ "$transport_type" != "null" ]; then
         echo "传输协议: $transport_type"  | tee -a "$output_file"
         if [ "$transport_type" == "ws" ]; then
@@ -3314,7 +3377,7 @@ function display_trojan_config_info() {
     else
         echo "传输协议: tcp"  | tee -a "$output_file"
     fi
-    echo -e "${CYAN}==================================================================${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"
 }
 
@@ -3324,14 +3387,12 @@ function display_trojan_config_files() {
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
     local win_client_file="/usr/local/etc/sing-box/win_client.json"          
     local server_name=$(jq -r '.inbounds[0].tls.server_name' "$config_file")
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")
-    local passwords=($(jq -r '.inbounds[0].users[].password' "$config_file"))
     local alpn=$(jq -r '.inbounds[0].tls.alpn | join(", ")' "$config_file")
     local transport_type=$(jq -r '.inbounds[0].transport.type' "$config_file")
     local transport_path=$(jq -r '.inbounds[0].transport.path' "$config_file")
     local transport_service_name=$(jq -r '.inbounds[0].transport.service_name' "$config_file")    
-    for ((i = 0; i < ${#passwords[@]}; i++)); do
-        local password="${passwords[i]}" 
+    for ((i = 0; i < ${#user_passwords[@]}; i++)); do
+        local user_password="${user_passwords[i]}"  
         write_phone_client_file
         write_win_client_file
         generate_trojan_win_client_config
@@ -3362,29 +3423,33 @@ function display_trojan_config_files() {
 
 function display_shadowtls_config_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
-    local output_file="/usr/local/etc/sing-box/output.txt"         
-    local local_ip
-    local_ip=$(get_local_ip)    
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
-    local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "\(.password)"' "$config_file")
+    local output_file="/usr/local/etc/sing-box/output.txt"     
     local user_input=$(jq -r '.inbounds[0].handshake.server' "$config_file")
-    local ss_password=$(jq -r '.inbounds[1].password' "$config_file")  
-    local method=$(jq -r '.inbounds[1].method' "$config_file")     
+    local method=$(jq -r '.inbounds[1].method' "$config_file")
+    if [[ -n "$ip_v4" ]]; then
+        local_ip="$ip_v4"
+    elif [[ -n "$ip_v6" ]]; then
+        local_ip="$ip_v6"
+    fi   
     echo -e "${CYAN}ShadowTLS 节点配置信息：${NC}" | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}" | tee -a "$output_file"
     echo "服务器地址: $local_ip" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "监听端口: $listen_port" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "加密方式: $method" | tee -a "$output_file"    
-    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"   
-    echo "ShadowTLS 密码:" | tee -a "$output_file" 
-    echo "$shadowtls_passwords" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
-    echo "Shadowsocks 密码: $ss_password" | tee -a "$output_file"
-    echo -e "${CYAN}----------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}" | tee -a "$output_file"   
+    echo "ShadowTLS用户名                  ShadowTLS密码"  | tee -a "$output_file" 
+    echo "------------------------------------------------------------------------------"  | tee -a "$output_file" 
+    for ((i = 0; i < ${#stls_passwords[@]}; i++)); do
+        local stls_password="${stls_passwords[i]}" 
+        printf "%-25s %s\n" "$user_name" "$stls_password" | tee -a "$output_file"
+    done 
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}" | tee -a "$output_file"
+    echo "Shadowsocks 密码: $ss_passwords" | tee -a "$output_file"
+    echo -e "${CYAN}------------------------------------------------------------------------------${NC}" | tee -a "$output_file"
     echo "握手服务器地址: $user_input" | tee -a "$output_file"
-    echo -e "${CYAN}================================================================${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}==============================================================================${NC}" | tee -a "$output_file"
     echo "配置信息已保存至 $output_file"      
 }
 
@@ -3392,23 +3457,15 @@ function display_shadowtls_config_files() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local clash_file="/usr/local/etc/sing-box/clash.yaml" 
     local phone_client_file="/usr/local/etc/sing-box/phone_client.json" 
-    local win_client_file="/usr/local/etc/sing-box/win_client.json"          
-    local local_ip
-    local_ip=$(get_local_ip)    
-    local listen_port=$(jq -r '.inbounds[0].listen_port' "$config_file")       
-    local shadowtls_passwords=$(jq -r '.inbounds[0].users[] | "\(.password)"' "$config_file")
+    local win_client_file="/usr/local/etc/sing-box/win_client.json"
     local user_input=$(jq -r '.inbounds[0].handshake.server' "$config_file")
-    local ss_password=$(jq -r '.inbounds[1].password' "$config_file")  
-    local method=$(jq -r '.inbounds[1].method' "$config_file")     
-    local IFS=$'\n'
-    local shadowtls_password=($(echo "$shadowtls_passwords"))
-    unset IFS
-    for shadowtls_password in "${shadowtls_password[@]}"; do
-        IFS=' ' read -r password <<< "$shadowtls_password"
+    local method=$(jq -r '.inbounds[1].method' "$config_file")
+    for ((i = 0; i < ${#stls_passwords[@]}; i++)); do
+        local stls_password="${stls_passwords[i]}" 
         write_phone_client_file
         write_win_client_file
-        generate_shadowtls_win_client_config "$shadowtls_password"
-        generate_shadowtls_phone_client_config "$shadowtls_password"
+        generate_shadowtls_win_client_config "$stls_password"
+        generate_shadowtls_phone_client_config "$stls_password"
         ensure_clash_yaml
         write_clash_yaml
         generate_shadowtls_yaml          
@@ -3457,8 +3514,6 @@ function uninstall_sing_box() {
     rm -rf /usr/local/bin/sing-box
     rm -rf /usr/local/etc/sing-box
     rm -rf /etc/systemd/system/sing-box.service
-    rm -rf /etc/ssl/private/*.crt 
-    rm -rf /etc/ssl/private/*.key 
     systemctl daemon-reload
     echo "sing-box 卸载完成。"
 }
@@ -3530,10 +3585,11 @@ function juicity_install() {
 
 function Direct_install() {
     install_sing_box
+    enable_bbr    
     log_outbound_config    
-    listen_port
-    override_address
-    override_port
+    set_listen_port
+    set_override_address
+    set_override_port
     generate_Direct_config
     modify_format_inbounds_and_outbounds
     check_firewall_configuration 
@@ -3541,14 +3597,17 @@ function Direct_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
+    get_local_ip    
     display_Direct_config
 }
 
 function Shadowsocks_install() {
     install_sing_box
+    enable_bbr
     log_outbound_config    
-    listen_port
-    encryption_method
+    set_listen_port
+    select_encryption_method
+    set_ss_password
     generate_ss_config
     modify_format_inbounds_and_outbounds
     check_firewall_configuration 
@@ -3556,12 +3615,14 @@ function Shadowsocks_install() {
     systemctl enable sing-box   
     systemctl start sing-box
     systemctl restart sing-box
+    get_local_ip
     display_Shadowsocks_config_info
     display_Shadowsocks_config_files
 }
 
 function socks_install() {
     install_sing_box
+    enable_bbr    
     log_outbound_config    
     generate_socks_config
     modify_format_inbounds_and_outbounds
@@ -3570,12 +3631,14 @@ function socks_install() {
     systemctl enable sing-box   
     systemctl start sing-box
     systemctl restart sing-box
+    get_local_ip
     display_socks_config_info
     display_socks_config_files
 }
 
 function NaiveProxy_install() {
     install_sing_box 
+    enable_bbr
     log_outbound_config        
     generate_naive_config
     modify_format_inbounds_and_outbounds    
@@ -3589,6 +3652,7 @@ function NaiveProxy_install() {
 
 function tuic_install() {
     install_sing_box 
+    enable_bbr
     log_outbound_config    
     generate_tuic_config
     modify_format_inbounds_and_outbounds    
@@ -3601,7 +3665,8 @@ function tuic_install() {
 }
 
 function Hysteria_install() {
-    install_sing_box  
+    install_sing_box
+    enable_bbr  
     log_outbound_config    
     generate_Hysteria_config
     modify_format_inbounds_and_outbounds    
@@ -3615,6 +3680,7 @@ function Hysteria_install() {
 
 function shadowtls_install() {
     install_sing_box 
+    enable_bbr
     log_outbound_config 
     generate_shadowtls_config
     modify_format_inbounds_and_outbounds    
@@ -3623,12 +3689,14 @@ function shadowtls_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
+    get_local_ip    
     display_shadowtls_config_info
     display_shadowtls_config_files
 }
 
 function reality_install() {
-    install_sing_box 
+    install_sing_box
+    enable_bbr
     log_outbound_config         
     generate_reality_config 
     modify_format_inbounds_and_outbounds     
@@ -3637,12 +3705,14 @@ function reality_install() {
     systemctl enable sing-box
     systemctl start sing-box
     systemctl restart sing-box
+    get_local_ip    
     display_reality_config_info
     display_reality_config_files
 }
 
 function Hysteria2_install() {
-    install_sing_box  
+    install_sing_box
+    enable_bbr  
     log_outbound_config    
     generate_Hy2_config
     modify_format_inbounds_and_outbounds    
@@ -3655,7 +3725,8 @@ function Hysteria2_install() {
 }
 
 function trojan_install() {
-    install_sing_box 
+    install_sing_box
+    enable_bbr 
     log_outbound_config
     generate_trojan_config 
     modify_format_inbounds_and_outbounds                              
@@ -3669,7 +3740,9 @@ function trojan_install() {
 
 function vmess_install() {
     install_sing_box
-    log_outbound_config    
+    enable_bbr
+    log_outbound_config 
+    get_local_ip           
     generate_vmess_config
     modify_format_inbounds_and_outbounds     
     systemctl daemon-reload   
@@ -3695,6 +3768,7 @@ function wireguard_install() {
 }
 
 function Update_certificate() {
+    get_local_ip 
     extract_tls_info
     Reapply_certificates
 } 
