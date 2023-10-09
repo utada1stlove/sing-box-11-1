@@ -1891,7 +1891,7 @@ function generate_tls_config() {
 function extract_tls_info() {
     local config_file="/usr/local/etc/sing-box/config.json"
     local tls_info_file="/usr/local/etc/sing-box/tls_info.json"
-    jq '[.inbounds[].tls | {server_name: .server_name, certificate_path: .certificate_path, key_path: .key_path}]' "$config_file" > "$tls_info_file"
+    jq '.inbounds[].tls | select(.server_name and .certificate_path and .key_path) | {server_name: .server_name, certificate_path: .certificate_path, key_path: .key_path}' "$config_file" | jq -s 'unique' > "$tls_info_file"
 }
 
 function extract_variables_and_cleanup() {
