@@ -759,7 +759,7 @@ function set_stls_password() {
 function set_up_speed() { 
     while true; do
         read -p "请输入上行速率 (默认50): " new_up_mbps
-        new_up_mbps=${up_mbps:-50}
+        new_up_mbps=${new_up_mbps:-50}
         if [[ $new_up_mbps =~ ^[0-9]+$ ]]; then            
             echo "上行速率：$new_up_mbps Mbps"
             break
