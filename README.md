@@ -1,9 +1,11 @@
 # **说明**
+- **脚本使用sing-box、Juicity内核。**
 - **脚本支持IPV6单栈机。**
 - **脚本支持 CentOS 8+、Debian 10+、Ubuntu 20+ 操作系统。**
 - **脚本支持 warp 解锁 ChatGPT、Netflix、Disney+。**
+- **脚本所有协议均支持自签证书（NaiveProxy除外）。**
 - **脚本支持多用户。**
-- **脚本支持多种协议共存。**
+- **脚本支持所有协议共存。**
 - **脚本支持生成Clash客户端配置文件，需要配合Meta内核。**
 - **脚本支持生成sing-box客户端配置文件。**
 - **电脑端使用方法：下载生成的win_client.json文件====>>V2rayN客户端添加自定义配置服务器====>>地址加载生成的win_client.json文件====>>Core类型选sing_box====>>Socks端口1080。**
@@ -131,10 +133,16 @@ service iptables save
 - **juicity**
 - **WireGuard--解锁 ChatGPT、Netflix、Disney+**
 - **Hysteria2**
+- **Vless+tcp**
+- **Vless+ws**
+- **Vless+gRPC**
 - **Vless+vision+Reality**
 - **Vless+h2+Reality**
 - **Vless+gRPC+Reality**
 - **Direct--sing-box版任意门**
+- **Trojan+tcp**
+- **Trojan+ws**
+- **Trojan+gRPC**
 - **Trojan+tcp+tls**
 - **Trojan+H2C+tls**
 - **Trojan+gRPC+tls**
