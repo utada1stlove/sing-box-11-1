@@ -959,6 +959,64 @@ function get_domain() {
     done
     domain="$user_domain"
 }
+
+function verify_domain() {
+    while true; do
+        read -p "请输入通配符域名（例如：*.example.com）: " new_domain
+
+        if [[ $new_domain =~ ^\*\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$ ]]; then
+            if [[ $new_domain =~ \.(tk|ml|ga|gq|cf)$ ]]; then
+                echo -e "${RED}该域名不支持使用CloudFlare的API申请证书，请选择其他方式申请证书！${NC}"
+                domain_supported=false
+            else
+                domain_supported=true
+            fi
+            break
+        else
+            echo -e "${RED}错误：无效的域名，请重新输入！${NC}"
+        fi
+    done
+    domain="$new_domain"
+}
+
+function get_api_token() {
+    while true; do
+        read -p "请输入 CloudFlare 的限制性 API 令牌: " api_token
+
+        if [[ ! $api_token =~ ^[A-Za-z0-9_-]{40}$ ]]; then
+            echo -e "${RED}API令牌格式不正确，请重新输入！${NC}"
+        else
+            export CF_Token="$api_token" 
+            break 
+        fi
+    done
+}
+
+function get_zone_id() {
+    while true; do
+        read -p "请输入 CloudFlare 的区域 ID: " zone_id
+
+        if [[ ! $zone_id =~ ^[a-z0-9]{32}$ ]]; then
+            echo -e "${RED}CloudFlare 的区域 ID 格式不正确，请重新输入！${NC}"
+        else
+            export CF_Zone_ID="$zone_id"
+            break
+        fi
+    done
+}
+
+function get_api_email() {
+    while true; do
+        read -p "请输入 CloudFlare 的登录邮箱: " api_email
+
+        if [[ ! $api_email =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$ ]]; then
+           echo -e "${RED}邮箱格式不正确，请重新输入！${NC}"
+        else
+            export CF_Email="$api_email"
+            break
+        fi
+    done
+}
    
 function set_fake_domain() {
     while true; do
@@ -1035,22 +1093,16 @@ function apply_certificate() {
         ~/.acme.sh/acme.sh --set-default-ca --server "$ca_server"
 
         if $has_ipv4; then
-            result=$(~/.acme.sh/acme.sh --issue -d "$domain" --standalone 2>&1)
+            result=$(~/.acme.sh/acme.sh --issue -d "$domain" --standalone -k ec-256 2>&1)
         else
-            result=$(~/.acme.sh/acme.sh --issue -d "$domain" --standalone --listen-v6 2>&1)
+            result=$(~/.acme.sh/acme.sh --issue -d "$domain" --standalone -k ec-256 --listen-v6 2>&1)
         fi
 
-        if [[ $result == *"log"* || $result == *"debug"* ]]; then
+        if [[ $result == *"log"* || $result == *"debug"* || $result == *"error"* || $result == *"force"* ]]; then
             echo -e "${RED}$result ${NC}"
-        fi        
-
-        if [[ $result == *"force"* ]]; then
-            if $has_ipv4; then
-                ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force >/dev/null 2>&1
-            else
-                ~/.acme.sh/acme.sh --issue -d "$domain" --standalone --force --listen-v6 >/dev/null 2>&1
-            fi
-        fi        
+            return_to_menu=true  
+            continue  
+        fi
 
         if [[ $? -eq 0 ]]; then
             echo "Installing the certificate..."
@@ -1058,8 +1110,60 @@ function apply_certificate() {
             break 
         else
             echo -e "${RED}Failed to obtain a certificate from $ca_server！${NC}"
+            return_to_menu=true
         fi
     done
+
+    if [ "$return_to_menu" = true ]; then
+        echo -e "${RED}证书申请失败，请使用其它方法申请证书！${NC}"
+        return 1
+    fi
+}
+
+function Apply_api_certificate() {
+    certificate_path="/etc/ssl/private/"$domain".crt"
+    private_key_path="/etc/ssl/private/"$domain".key"
+    local has_ipv4=false
+    local ca_servers=("letsencrypt" "zerossl")
+
+    if [[ -n "$ip_v4" ]]; then
+        has_ipv4=true
+    fi
+
+    echo "Requesting a certificate..."        
+    curl -s https://get.acme.sh | sh -s email=example@gmail.com 2>&1 | tail -n 1
+    alias acme.sh=~/.acme.sh/acme.sh
+
+    for ca_server in "${ca_servers[@]}"; do
+        echo "Requesting a certificate from $ca_server..."
+        ~/.acme.sh/acme.sh --set-default-ca --server "$ca_server"
+
+        if $has_ipv4; then
+            result=$(~/.acme.sh/acme.sh --issue --dns dns_cf -d "$domain" -k ec-256 2>&1)
+        else
+            result=$(~/.acme.sh/acme.sh --issue --dns dns_cf -d "$domain" -k ec-256 --listen-v6 2>&1)
+        fi
+
+        if [[ $result == *"log"* || $result == *"debug"* || $result == *"error"* || $result == *"force"* ]]; then
+            echo -e "${RED}$result ${NC}"
+            return_to_menu=true  
+            continue  
+        fi
+ 
+        if [[ $? -eq 0 ]]; then
+            echo "Installing the certificate..."
+            ~/.acme.sh/acme.sh --install-cert -d "$domain" --ecc --key-file "$private_key_path" --fullchain-file "$certificate_path"
+            break 
+        else
+            echo -e "${RED}Failed to obtain a certificate from $ca_server！${NC}"
+            return_to_menu=true
+        fi
+    done
+
+    if [ "$return_to_menu" = true ]; then
+        echo -e "${RED}证书申请失败，请使用其它方法申请证书！${NC}"
+        return 1
+    fi
 }
 
 function Reapply_certificates() {
@@ -1311,34 +1415,55 @@ function select_congestion_control() {
 
 function select_certificate_option() {
     local certificate_option
+    local domain_supported=false
+    local return_to_menu=false
     while true; do
         read -p "请选择证书来源 (默认1)：
 1). 自签证书
-2). acme自动申请证书
-3). 自定义证书路径
-请选择[1-3]: " certificate_option
+2). 监听80端口申请证书（standalone模式）
+3). cloudflare API 申请证书（DNS API模式）
+4). 自定义证书路径
+请选择[1-4]: " certificate_option
         certificate_option=${certificate_option:-1}
-
         case $certificate_option in
             1)
                 if $disable_option; then
                     echo -e "${RED}NaiveProxy节点不支持自签证书，请使用acme申请证书！${NC}"
                     continue
                 fi
-                echo "You have chosen a self-signed certificate."
                 check_firewall_configuration
                 create_self_signed_cert
                 break
                 ;;        
             2)
-                echo "You have chosen to automatically request a certificate."
+                get_local_ip
                 get_domain
                 check_firewall_configuration
                 apply_certificate
+                if [ "$return_to_menu" == true ]; then
+                    return_to_menu=false
+                    continue
+                fi
                 break
                 ;;
             3)
-                echo "You have chosen to use your own certificate."
+                verify_domain
+                check_firewall_configuration
+                if [ "$domain_supported" == "false" ]; then
+                    continue
+                else
+                    get_api_token
+                    get_zone_id
+                    get_api_email
+                    Apply_api_certificate
+                    if [ "$return_to_menu" == true ]; then
+                        return_to_menu=false
+                        continue
+                    fi
+                    break
+                fi
+                ;;
+            4)
                 get_domain 
                 check_firewall_configuration
                 set_certificate_path
@@ -4183,6 +4308,7 @@ function check_wireguard_config() {
 
 function juicity_install() {
     configure_dns64
+    add_cron_job
     enable_bbr
     create_juicity_folder
     create_ssl_folder   
@@ -4199,6 +4325,7 @@ function juicity_install() {
 
 function Direct_install() {
     install_sing_box
+    add_cron_job
     enable_bbr    
     log_outbound_config    
     set_listen_port
@@ -4217,6 +4344,7 @@ function Direct_install() {
 
 function Shadowsocks_install() {
     install_sing_box
+    add_cron_job
     enable_bbr
     log_outbound_config    
     set_listen_port
@@ -4236,6 +4364,7 @@ function Shadowsocks_install() {
 
 function socks_install() {
     install_sing_box
+    add_cron_job
     enable_bbr    
     log_outbound_config    
     generate_socks_config
@@ -4252,6 +4381,7 @@ function socks_install() {
 
 function NaiveProxy_install() {
     install_sing_box 
+    add_cron_job
     enable_bbr
     log_outbound_config        
     generate_naive_config
@@ -4266,6 +4396,7 @@ function NaiveProxy_install() {
 
 function tuic_install() {
     install_sing_box 
+    add_cron_job
     enable_bbr
     log_outbound_config    
     generate_tuic_config
@@ -4281,6 +4412,7 @@ function tuic_install() {
 
 function Hysteria_install() {
     install_sing_box
+    add_cron_job
     enable_bbr  
     log_outbound_config    
     generate_Hysteria_config
@@ -4294,7 +4426,8 @@ function Hysteria_install() {
 }
 
 function shadowtls_install() {
-    install_sing_box 
+    install_sing_box
+    add_cron_job
     enable_bbr
     log_outbound_config 
     generate_shadowtls_config
@@ -4311,6 +4444,7 @@ function shadowtls_install() {
 
 function reality_install() {
     install_sing_box
+    add_cron_job
     enable_bbr
     log_outbound_config         
     generate_vless_config 
@@ -4327,6 +4461,7 @@ function reality_install() {
 
 function Hysteria2_install() {
     install_sing_box
+    add_cron_job
     enable_bbr  
     log_outbound_config    
     generate_Hy2_config
@@ -4341,6 +4476,7 @@ function Hysteria2_install() {
 
 function trojan_install() {
     install_sing_box
+    add_cron_job
     enable_bbr 
     log_outbound_config
     generate_trojan_config 
@@ -4355,6 +4491,7 @@ function trojan_install() {
 
 function vmess_install() {
     install_sing_box
+    add_cron_job
     enable_bbr
     log_outbound_config 
     get_local_ip
@@ -4383,6 +4520,7 @@ function wireguard_install() {
 }
 
 function Update_certificate() {
+    add_cron_job
     get_local_ip 
     extract_tls_info
     validate_tls_info
@@ -4392,7 +4530,13 @@ function Update_certificate() {
 function Update_Script() {
     wget -O /root/singbox.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh
     chmod +x /root/singbox.sh 
-} 
+}
+
+function add_cron_job() {
+    if ! crontab -l | grep -q "singbox.sh"; then
+        (crontab -l ; echo "0 2 * * 1 /bin/bash /root/singbox.sh >> /usr/local/etc/certificate.log 2>&1") | crontab -
+    fi
+}
 
 function main_menu() {
 echo "╔════════════════════════════════════════════════════════════════════════╗"
@@ -4420,61 +4564,79 @@ echo "╚═══════════════════════�
     case $choice in
         1)
             socks_install
+            exit 0
             ;;
         2)
             Direct_install
+            exit 0
             ;;  
         3)
             vmess_install
+            exit 0
             ;;                      
         4)
             reality_install
+            exit 0
             ;;
         5)
             tuic_install
+            exit 0
             ;;
         6)
             juicity_install
+            exit 0
             ;;                
         7)
             trojan_install
+            exit 0
             ;;
         8)
             Hysteria_install
+            exit 0
             ;;
         9)
             Hysteria2_install
+            exit 0
             ;;
         10)
             shadowtls_install
+            exit 0
             ;; 
         11)
             NaiveProxy_install
+            exit 0
             ;;  
         12)
             Shadowsocks_install
+            exit 0
             ;;
         13)
             wireguard_install
+            exit 0
             ;;                                       
         14)
             view_saved_config
+            exit 0
             ;;
 
         15)
             update_proxy_tool
+            exit 0
             ;;
         16)
             Update_Script
+            exit 0
             ;;   
         17)
             Update_certificate
             ;; 
         18)
             check_and_restart_services
+            exit 0
             ;;                                    
         19)
             uninstall
+            exit 0
             ;;                   
         0)
             echo "感谢使用 Mr. xiao 安装脚本！再见！"
@@ -4486,5 +4648,21 @@ echo "╚═══════════════════════�
             ;;
     esac
 }
+
+function run_option() {
+    case "$1" in
+        "17")
+            Update_certificate
+            exit 0 
+            ;;
+    esac
+}
+
+if [ $# -eq 0 ]; then
+    main_menu
+else
+    
+    run_option "$1"
+fi
 
 main_menu
