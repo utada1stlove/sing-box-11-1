@@ -4522,8 +4522,8 @@ function Update_certificate() {
 } 
 
 function Update_Script() {
-    wget -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh
-    chmod +x /root/sing-box.sh 
+    wget -O /root/singbox.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh
+    chmod +x /root/singbox.sh 
 }
 
 function add_cron_job() {
