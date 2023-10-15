@@ -917,8 +917,8 @@ function get_local_ip() {
     local local_ip_v4
     local local_ip_v6
 
-    local_ip_v4=$(curl -s https://ipinfo.io/ip || curl -s https://api.ipify.org || curl -s https://ifconfig.co/ip || curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" || curl -s icanhazip.com || curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
-    local_ip_v6=$(ip -o -6 addr show scope global | awk '{split($4, a, "/"); print a[1]; exit}')
+    local_ip_v4=$(curl -s4 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s4 icanhazip.com)
+    local_ip_v6=$(curl -s6 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s4 icanhazip.com)
 
     if [[ -n "$local_ip_v4" ]]; then
         ip_v4="$local_ip_v4"
@@ -4308,13 +4308,13 @@ function check_wireguard_config() {
 
 function juicity_install() {
     configure_dns64
-    add_cron_job
     enable_bbr
     create_juicity_folder
     create_ssl_folder   
     install_latest_juicity
     get_local_ip
     generate_juicity_config
+    add_cron_job
     configure_juicity_service
     systemctl daemon-reload
     systemctl enable juicity.service
@@ -4325,7 +4325,6 @@ function juicity_install() {
 
 function Direct_install() {
     install_sing_box
-    add_cron_job
     enable_bbr    
     log_outbound_config    
     set_listen_port
@@ -4344,7 +4343,6 @@ function Direct_install() {
 
 function Shadowsocks_install() {
     install_sing_box
-    add_cron_job
     enable_bbr
     log_outbound_config    
     set_listen_port
@@ -4364,7 +4362,6 @@ function Shadowsocks_install() {
 
 function socks_install() {
     install_sing_box
-    add_cron_job
     enable_bbr    
     log_outbound_config    
     generate_socks_config
@@ -4380,11 +4377,11 @@ function socks_install() {
 }
 
 function NaiveProxy_install() {
-    install_sing_box 
-    add_cron_job
+    install_sing_box
     enable_bbr
     log_outbound_config        
     generate_naive_config
+    add_cron_job
     modify_format_inbounds_and_outbounds    
     systemctl daemon-reload
     systemctl enable sing-box
@@ -4395,11 +4392,11 @@ function NaiveProxy_install() {
 }
 
 function tuic_install() {
-    install_sing_box 
-    add_cron_job
+    install_sing_box
     enable_bbr
     log_outbound_config    
     generate_tuic_config
+    add_cron_job
     modify_format_inbounds_and_outbounds    
     systemctl daemon-reload
     systemctl enable sing-box
@@ -4412,10 +4409,10 @@ function tuic_install() {
 
 function Hysteria_install() {
     install_sing_box
-    add_cron_job
     enable_bbr  
     log_outbound_config    
     generate_Hysteria_config
+    add_cron_job
     modify_format_inbounds_and_outbounds    
     systemctl daemon-reload
     systemctl enable sing-box
@@ -4427,7 +4424,6 @@ function Hysteria_install() {
 
 function shadowtls_install() {
     install_sing_box
-    add_cron_job
     enable_bbr
     log_outbound_config 
     generate_shadowtls_config
@@ -4444,7 +4440,6 @@ function shadowtls_install() {
 
 function reality_install() {
     install_sing_box
-    add_cron_job
     enable_bbr
     log_outbound_config         
     generate_vless_config 
@@ -4461,10 +4456,10 @@ function reality_install() {
 
 function Hysteria2_install() {
     install_sing_box
-    add_cron_job
     enable_bbr  
     log_outbound_config    
     generate_Hy2_config
+    add_cron_job
     modify_format_inbounds_and_outbounds    
     systemctl daemon-reload
     systemctl enable sing-box
@@ -4476,10 +4471,10 @@ function Hysteria2_install() {
 
 function trojan_install() {
     install_sing_box
-    add_cron_job
     enable_bbr 
     log_outbound_config
     generate_trojan_config 
+    add_cron_job
     modify_format_inbounds_and_outbounds                              
     systemctl daemon-reload      
     systemctl enable sing-box 
@@ -4491,11 +4486,11 @@ function trojan_install() {
 
 function vmess_install() {
     install_sing_box
-    add_cron_job
     enable_bbr
     log_outbound_config 
     get_local_ip
     generate_vmess_config
+    add_cron_job
     modify_format_inbounds_and_outbounds     
     systemctl daemon-reload   
     systemctl enable sing-box
@@ -4520,7 +4515,6 @@ function wireguard_install() {
 }
 
 function Update_certificate() {
-    add_cron_job
     get_local_ip 
     extract_tls_info
     validate_tls_info
@@ -4528,8 +4522,8 @@ function Update_certificate() {
 } 
 
 function Update_Script() {
-    wget -O /root/singbox.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh
-    chmod +x /root/singbox.sh 
+    wget -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh
+    chmod +x /root/sing-box.sh 
 }
 
 function add_cron_job() {
