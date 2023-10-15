@@ -1,4 +1,5 @@
 # **说明**
+- **脚本快捷方式为sing-box。**
 - **脚本使用sing-box、Juicity内核。**
 - **脚本支持IPV6单栈机。**
 - **脚本支持 CentOS 8+、Debian 10+、Ubuntu 20+ 操作系统。**
