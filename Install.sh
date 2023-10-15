@@ -918,7 +918,7 @@ function get_local_ip() {
     local local_ip_v6
 
     local_ip_v4=$(curl -s4 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s4 icanhazip.com)
-    local_ip_v6=$(curl -s6 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s4 icanhazip.com)
+    local_ip_v6=$(curl -s6 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s6 icanhazip.com)
 
     if [[ -n "$local_ip_v4" ]]; then
         ip_v4="$local_ip_v4"
