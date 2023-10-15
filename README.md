@@ -6,6 +6,7 @@
 - **脚本所有协议均支持自签证书（NaiveProxy除外）。**
 - **脚本支持多用户。**
 - **脚本支持所有协议共存。**
+- **脚本支持自动续签证书。**
 - **脚本支持生成Clash客户端配置文件，需要配合Meta内核。**
 - **脚本支持生成sing-box客户端配置文件。**
 - **电脑端使用方法：下载生成的win_client.json文件====>>V2rayN客户端添加自定义配置服务器====>>地址加载生成的win_client.json文件====>>Core类型选sing_box====>>Socks端口1080。**
@@ -22,7 +23,7 @@ yum update && yum -y install curl wget tar socat jq git openssl util-linux gcc-c
 ```
 - **使用以下命令运行脚本**
 ```
-wget -N -O /root/singbox.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh && chmod +x /root/singbox.sh && ln -sf /root/singbox.sh /usr/local/bin/singbox && bash /root/singbox.sh
+wget -N -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh && chmod +x /root/sing-box.sh && ln -sf /root/sing-box.sh /usr/local/bin/sing-box && bash /root/sing-box.sh
 ```
 # **Hysteria端口跳跃**
 ```
