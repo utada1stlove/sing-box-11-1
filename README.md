@@ -1,5 +1,4 @@
 # **说明**
-- **脚本快捷方式为sing-box。**
 - **脚本使用sing-box、Juicity内核。**
 - **脚本支持IPV6单栈机。**
 - **脚本支持 CentOS 8+、Debian 10+、Ubuntu 20+ 操作系统。**
@@ -24,7 +23,7 @@ yum update && yum -y install curl wget tar socat jq git openssl util-linux gcc-c
 ```
 - **使用以下命令运行脚本**
 ```
-wget -N -O /root/sing-box.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh && chmod +x /root/sing-box.sh && ln -sf /root/sing-box.sh /usr/local/bin/sing-box && bash /root/sing-box.sh
+wget -N -O /root/singbox.sh https://raw.githubusercontent.com/TinrLin/script_installation/main/Install.sh && chmod +x /root/singbox.sh && ln -sf /root/singbox.sh /usr/local/bin/singbox && bash /root/singbox.sh
 ```
 # **Hysteria端口跳跃**
 ```
