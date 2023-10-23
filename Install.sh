@@ -1528,13 +1528,13 @@ function select_certificate_option() {
 function select_vmess_type() {
     while true; do
         read -p "请选择节点类型（默认1）：
-1). Vmess+tcp
-2). Vmess+ws
-3). Vmess+gRPC       
-4). Vmess+tcp+tls
-5). Vmess+ws+tls 
-6). Vmess+h2c+tls
-7). Vmess+gRPC+tls                      
+1). VMess+TCP
+2). VMess+WebSocket
+3). VMess+gRPC
+4). VMess+TCP+TLS
+5). VMess+WebSocket+TLS
+6). VMess+H2C+TLS
+7). VMess+gRPC+TLS
 请选择 [1-7]: " node_type
 
         case $node_type in
@@ -1583,12 +1583,12 @@ function select_vmess_type() {
 function select_vless_type() {
     while true; do
         read -p "请选择节点类型 (默认1)：     
-1). vless+tcp
-2). vless+ws
-3). vless+gRPC        
-4). vless+vision+reality
-5). vless+h2+reality
-6). vless+grpc+reality
+1). VLESS+TCP
+2). VLESS+WebSocket
+3). VLESS+gRPC
+4). VLESS+Vision+REALITY
+5). VLESS+H2C+REALITY
+6). VLESS+gRPC+REALITY
 请选择[1-6]: " flow_option
 
         case $flow_option in
@@ -1638,13 +1638,13 @@ function select_vless_type() {
 function select_trojan_type() {
     while true; do
         read -p "请选择节点类型（默认1）：
-1). trojan+tcp
-2). trojan+ws
-3). trojan+gRPC        
-4). trojan+tcp+tls
-5). trojan+ws+tls
-6). trojan+h2c+tls       
-7). trojan+gRPC+tls
+1). Trojan+TCP
+2). Trojan+WebSocket
+3). Trojan+gRPC
+4). Trojan+TCP+TLS
+5). Trojan+WebSocket+TLS
+6). Trojan+H2C+TLS
+7). Trojan+gRPC+TLS
 请选择 [1-7]: " setup_type
 
         case $setup_type in
@@ -3576,7 +3576,7 @@ function display_juicity_config() {
     else
         server_address="$domain"
     fi
-    echo -e "${CYAN}juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
+    echo -e "${CYAN}Juicity 节点配置信息：${NC}"  | tee -a "$output_file"     
     echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "服务器地址: $server_address"  | tee -a "$output_file"
     echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
@@ -3895,7 +3895,7 @@ function display_reality_config_info() {
     if [[ "$flow_type" == "xtls-rprx-vision" ]]; then
         transport_type="tcp"
     fi
-    echo -e "${CYAN}Vless+Reality 节点配置信息：${NC}" | tee -a "$output_file"
+    echo -e "${CYAN}VLESS 节点配置信息：${NC}" | tee -a "$output_file"
     echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"
     echo "服务器地址: $local_ip" | tee -a "$output_file"
     echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
@@ -4033,7 +4033,7 @@ function display_vmess_config_info() {
     elif [[ -n "$domain" ]]; then
         server_address="$domain"
     fi
-    echo -e "${CYAN}Vmess 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}VMess 节点配置信息：${NC}"  | tee -a "$output_file"
     echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file"    
     echo "服务器地址: $server_address"  | tee -a "$output_file"   
     echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
@@ -4140,7 +4140,7 @@ function display_trojan_config_info() {
     elif [[ -n "$domain" ]]; then
         server_address="$domain"
     fi
-    echo -e "${CYAN}trojan 节点配置信息：${NC}"  | tee -a "$output_file"
+    echo -e "${CYAN}Trojan 节点配置信息：${NC}"  | tee -a "$output_file"
     echo -e "${CYAN}==============================================================================${NC}"  | tee -a "$output_file" 
     echo "服务器地址: $server_address"  | tee -a "$output_file"  
     echo -e "${CYAN}------------------------------------------------------------------------------${NC}"  | tee -a "$output_file"
@@ -4588,8 +4588,8 @@ echo -e "║ ${CYAN}Telegram 群组${NC}: https://t.me/mrxiao758                
 echo -e "║ ${CYAN}YouTube频道${NC}: https://youtube.com/@Mr_xiao502                           ║"
 echo "╠════════════════════════════════════════════════════════════════════════╣"
 echo "║ 请选择要执行的操作：                                                   ║"
-echo -e "║${CYAN} [1]${NC}  Socks                         ${CYAN} [2]${NC}   Direct                       ║"
-echo -e "║${CYAN} [3]${NC}  Vmess                         ${CYAN} [4]${NC}   Vless                        ║"
+echo -e "║${CYAN} [1]${NC}  SOCKS                         ${CYAN} [2]${NC}   Direct                       ║"
+echo -e "║${CYAN} [3]${NC}  VMess                         ${CYAN} [4]${NC}   VLESS                        ║"
 echo -e "║${CYAN} [5]${NC}  TUIC                          ${CYAN} [6]${NC}   Juicity                      ║"
 echo -e "║${CYAN} [7]${NC}  Trojan                        ${CYAN} [8]${NC}   Hysteria                     ║"
 echo -e "║${CYAN} [9]${NC}  Hysteria2                     ${CYAN} [10]${NC}  ShadowTLS                    ║"
