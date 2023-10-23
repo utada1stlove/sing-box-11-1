@@ -15,11 +15,11 @@
 # **安装**
 - **Debian&&Ubuntu使用以下命令安装依赖**
 ```
-apt update && apt -y install curl wget tar socat jq git openssl uuid-runtime build-essential zlib1g-dev libssl-dev libevent-dev dnsutils
+apt update && apt -y install curl wget tar socat jq git openssl uuid-runtime build-essential zlib1g-dev libssl-dev libevent-dev dnsutils cron
 ```
 - **CentOS使用以下命令安装依赖**
 ```
-yum update && yum -y install curl wget tar socat jq git openssl util-linux gcc-c++ zlib-devel openssl-devel libevent-devel bind-utils
+yum update && yum -y install curl wget tar socat jq git openssl util-linux gcc-c++ zlib-devel openssl-devel libevent-devel bind-utils cronie
 ```
 - **使用以下命令运行脚本**
 ```
