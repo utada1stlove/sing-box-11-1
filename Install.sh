@@ -10,6 +10,9 @@ listen_port=""
 override_port=""
 ip_v4=""
 ip_v6=""
+record_content=""
+record_type=""
+record_name=""
 obfs_password=""
 user_names=()
 user_passwords=()
@@ -961,22 +964,49 @@ function get_domain() {
 }
 
 function verify_domain() {
-    while true; do
-        read -p "请输入通配符域名（例如：*.example.com）: " new_domain
+    new_domain=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id" \
+    -H "Authorization: Bearer $api_token" | jq -r '.result.name')
+    
+    if [[ $new_domain =~ \.(tk|ml|ga|gq|cf)$ ]]; then
+        echo -e "${RED}您的域名为$new_domain，该域名不支持使用 CloudFlare 的 API 申请证书，请选择其他方式申请证书！${NC}"
+        domain_supported=false
+    else
+        while true; do
+            read -p "请输入主域名前缀（若为空则使用主域名申请证书，不需要在 CloudFlare 添加 DNS 解析记录）: " domain_prefix
 
-        if [[ $new_domain =~ ^\*\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$ ]]; then
-            if [[ $new_domain =~ \.(tk|ml|ga|gq|cf)$ ]]; then
-                echo -e "${RED}该域名不支持使用CloudFlare的API申请证书，请选择其他方式申请证书！${NC}"
-                domain_supported=false
+            if [ -z "$domain_prefix" ]; then
+                domain="$new_domain"
+                record_name="$domain_prefix"
+                break
             else
-                domain_supported=true
+                domain="$domain_prefix"."$new_domain"
+                record_name="$domain_prefix"
+                break
             fi
-            break
-        else
-            echo -e "${RED}错误：无效的域名，请重新输入！${NC}"
-        fi
-    done
-    domain="$new_domain"
+        done
+        domain_supported=true
+    fi
+}
+
+function set_dns_record() {
+    if [[ -z "$record_name" ]]; then
+        name_value="@"
+    else
+        name_value="$record_name"
+    fi
+
+    if [[ -n "$ip_v4" ]]; then
+        record_content=" $ip_v4"
+        record_type="A"
+    elif [[ -z "$ip_v4" && -n "$ip_v6" ]]; then
+        record_content=" $ip_v6"
+        record_type="AAAA"
+    fi
+
+    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_Zone_ID/dns_records" \
+      -H "Authorization: Bearer $CF_Token" \
+      -H "Content-Type: application/json" \
+      --data "{\"type\":\"$record_type\",\"name\":\"$name_value\",\"content\":\"$record_content\",\"ttl\":120,\"proxied\":false}" >/dev/null
 }
 
 function get_api_token() {
@@ -1173,34 +1203,49 @@ function Reapply_certificates() {
     if [ -n "$ip_v4" ]; then
         has_ipv4=true
     fi
+
     if ! command -v acme.sh &>/dev/null; then
         curl -s https://get.acme.sh | sh -s email=example@gmail.com
     fi
     alias acme.sh=~/.acme.sh/acme.sh
-    ca_servers=("letsencrypt" "zerossl")
-    for ca_server in "${ca_servers[@]}"; do
-        echo "Setting CA server to $ca_server..."
-        ~/.acme.sh/acme.sh --set-default-ca --server "$ca_server"
-        jq -c '.[]' "$tls_info_file" | while read -r tls_info; do
-            server_name=$(echo "$tls_info" | jq -r '.server_name')
-            key_path=$(echo "$tls_info" | jq -r '.key_path')
-            certificate_path=$(echo "$tls_info" | jq -r '.certificate_path')
-            echo "Requesting certificate for $server_name..."
+
+    echo "Setting CA server to Let's Encrypt..."
+    ~/.acme.sh/acme.sh --set-default-ca --server "letsencrypt"
+    jq -c '.[]' "$tls_info_file" | while read -r tls_info; do
+        server_name=$(echo "$tls_info" | jq -r '.server_name')
+        key_path=$(echo "$tls_info" | jq -r '.key_path')
+        certificate_path=$(echo "$tls_info" | jq -r '.certificate_path')
+        echo "Requesting certificate for $server_name..."
+        
+        result=$(
+            if $has_ipv4; then
+                ~/.acme.sh/acme.sh --issue --dns dns_cf -d "$server_name" -k ec-256 --force
+            else
+                ~/.acme.sh/acme.sh --issue --dns dns_cf -d "$server_name" -k ec-256 --listen-v6 --force
+            fi
+        )
+        
+        if [[ "$result" =~ "Cert success." ]]; then
+            echo "Certificate for $server_name has been applied using Cloudflare DNS verification."
+        else
+            echo "Cloudflare DNS verification failed for $server_name. Trying standalone verification..."
             result=$(
                 if $has_ipv4; then
-                    ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone
+                    ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --force
                 else
-                    ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6
+                    ~/.acme.sh/acme.sh --issue -d "$server_name" --standalone --listen-v6 --force
                 fi
             )
+            
             if [[ "$result" =~ "BEGIN CERTIFICATE" && "$result" =~ "END CERTIFICATE" ]]; then
-                echo "Certificate for $server_name has already been issued and installed using $ca_server CA."
-                return 0  
+                echo "Certificate for $server_name has been applied using Let's Encrypt CA."
             else
-                ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
-                echo "Certificate for $server_name has been applied and installed using $ca_server CA."
+                echo "Failed to obtain certificate for $server_name using standalone verification as well."
+                return 1
             fi
-        done
+        fi      
+        ~/.acme.sh/acme.sh --install-cert -d "$server_name" --ecc --key-file "$key_path" --fullchain-file "$certificate_path"
+        echo "Certificate for $server_name has been installed."
     done
     rm -f "$tls_info_file"
 }
@@ -1447,14 +1492,16 @@ function select_certificate_option() {
                 break
                 ;;
             3)
+                get_local_ip
+                get_api_token
+                get_zone_id
+                get_api_email
                 verify_domain
+                set_dns_record
                 check_firewall_configuration
                 if [ "$domain_supported" == "false" ]; then
                     continue
                 else
-                    get_api_token
-                    get_zone_id
-                    get_api_email
                     Apply_api_certificate
                     if [ "$return_to_menu" == true ]; then
                         return_to_menu=false
@@ -1464,6 +1511,7 @@ function select_certificate_option() {
                 fi
                 ;;
             4)
+                get_local_ip
                 get_domain 
                 check_firewall_configuration
                 set_certificate_path
@@ -2527,7 +2575,7 @@ function write_clash_yaml() {
   local clash_yaml="${dir}/clash.yaml"
   local api_pass=$(head /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16) 
   if [ ! -s "${clash_yaml}" ]; then
-    awk -v api_pass="$api_pass" 'BEGIN { print "mixed-port: 10801"; print "redir-port: 7892"; print "tproxy-port: 7893"; print "allow-lan: true"; print "bind-address: \"*\""; print "find-process-mode: strict"; print "mode: rule"; print "geox-url:"; print "  geoip: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat\""; print "  geosite: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat\""; print "  mmdb: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb\""; print "log-level: debug"; print "ipv6: true"; print "external-controller: 0.0.0.0:9093"; print "secret: \"" api_pass "\""; print "tcp-concurrent: true"; print "interface-name: en0"; print "global-client-fingerprint: chrome"; print "profile:"; print "  store-selected: false"; print "  store-fake-ip: true"; print "tun:"; print "  enable: true"; print "  stack: system"; print "  dns-hijack:"; print "    - 0.0.0.0:53"; print "  auto-detect-interface: true"; print "  auto-route: false"; print "  mtu: 9000"; print "  strict-route: true"; print "ebpf:"; print "  auto-redir:"; print "    - eth0"; print "  redirect-to-tun:"; print "    - eth0"; print "sniffer:"; print "  enable: true"; print "  override-destination: false"; print "  sniff:"; print "    TLS:"; print "      ports: [443, 8443]"; print "    HTTP:"; print "      ports: [80, 8080-8880]"; print "      override-destination: true"; print "  force-domain:"; print "    - +.v2ex.com"; print "tunnels:"; print "  - tcp/udp,127.0.0.1:6553,114.114.114.114:53,Proxy"; print "  - network: [tcp, udp]"; print "    address: 127.0.0.1:7777"; print "    target: target.com"; print "    proxy: Proxy"; print "dns:"; print "  enable: true"; print "  prefer-h3: true"; print "  listen: 0.0.0.0:53"; print "  ipv6: true"; print "  ipv6-timeout: 300"; print "  default-nameserver:"; print "    - 114.114.114.114"; print "    - 8.8.8.8"; print "    - tls://1.12.12.12:853"; print "    - tls://223.5.5.5:853"; print "    - system"; print "  enhanced-mode: fake-ip"; print "  fake-ip-range: 198.18.0.1/16"; print "  nameserver:"; print "    - https://dns.alidns.com/dns-query"; print "    - https://223.5.5.5/dns-query"; print "    - https://doh.pub/dns-query"; print "    - https://dns.alidns.com/dns-query#h3=true"; print "    - quic://dns.adguard.com:784"; print "  fallback:"; print "    - tls://dns.google"; print "    - https://1.1.1.1/dns-query"; print "    - https://cloudflare-dns.com/dns-query"; print "    - https://dns.google/dns-query"; print "  fallback-filter:"; print "    geoip: true"; print "    geoip-code: CN"; print "    geosite:"; print "      - gfw"; print "    ipcidr:"; print "      - 240.0.0.0/4"; print "    domain:"; print "      - \"+.google.com\""; print "      - \"+.facebook.com\""; print "      - \"+.youtube.com\""; print "  nameserver-policy:"; print "    \"geosite:cn,private,apple\":"; print "      - https://doh.pub/dns-query"; print "      - https://dns.alidns.com/dns-query"; print "    \"geosite:category-ads-all\": rcode://success"; print "    \"www.baidu.com,+.google.cn\": [223.5.5.5, https://dns.alidns.com/dns-query]"; print "proxies:"; print "proxy-groups:"; print "  - name: Proxy"; print "    type: select"; print "    proxies:"; print "      - auto"; print "  - name: auto"; print "    type: url-test"; print "    proxies:"; print "    url: \"https://cp.cloudflare.com/generate_204\""; print "    interval: 300"; print "rule-providers:"; print "  reject:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt\""; print "    path: ./ruleset/reject.yaml"; print "    interval: 86400"; print "  icloud:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/icloud.txt\""; print "    path: ./ruleset/icloud.yaml"; print "    interval: 86400"; print "  apple:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt\""; print "    path: ./ruleset/apple.yaml"; print "    interval: 86400"; print "  direct:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt\""; print "    path: ./ruleset/direct.yaml"; print "    interval: 86400"; print "  private:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt\""; print "    path: ./ruleset/private.yaml"; print "    interval: 86400"; print "  gfw:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt\""; print "    path: ./ruleset/gfw.yaml"; print "    interval: 86400"; print "  tld-not-cn:"; print "    type: http"; print "    behavior: domain"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/tld-not-cn.txt\""; print "    path: ./ruleset/tld-not-cn.yaml"; print "    interval: 86400"; print "  cncidr:"; print "    type: http"; print "    behavior: ipcidr"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt\""; print "    path: ./ruleset/cncidr.yaml"; print "    interval: 86400"; print "  lancidr:"; print "    type: http"; print "    behavior: ipcidr"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt\""; print "    path: ./ruleset/lancidr.yaml"; print "    interval: 86400"; print "  applications:"; print "    type: http"; print "    behavior: classical"; print "    url: \"https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/applications.txt\""; print "    path: ./ruleset/applications.yaml"; print "    interval: 86400"; print "rules:"; print "  - RULE-SET,applications,DIRECT"; print "  - DOMAIN,clash.razord.top,DIRECT"; print "  - DOMAIN,yacd.haishan.me,DIRECT"; print "  - DOMAIN-SUFFIX,services.googleapis.cn,DIRECT"; print "  - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,DIRECT"; print "  - RULE-SET,private,DIRECT"; print "  - RULE-SET,reject,REJECT"; print "  - RULE-SET,icloud,DIRECT"; print "  - RULE-SET,apple,DIRECT"; print "  - RULE-SET,direct,DIRECT"; print "  - RULE-SET,lancidr,DIRECT"; print "  - RULE-SET,cncidr,DIRECT"; print "  - GEOIP,LAN,DIRECT"; print "  - GEOIP,CN,DIRECT"; print "  - MATCH,Proxy"; }' > "${clash_yaml}"
+    awk -v api_pass="$api_pass" 'BEGIN { print "mixed-port: 10801"; print "allow-lan: true"; print "bind-address: \"*\""; print "find-process-mode: strict"; print "mode: rule"; print "geox-url:"; print "  geoip: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat\""; print "  geosite: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat\""; print "  mmdb: \"https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb\""; print "log-level: debug"; print "ipv6: true"; print "external-controller: 0.0.0.0:9093"; print "secret: \"" api_pass "\""; print "global-client-fingerprint: chrome"; print "tun:"; print "  enable: true"; print "  stack: system"; print "  dns-hijack:"; print "    - 0.0.0.0:53"; print "  auto-detect-interface: true"; print "  auto-route: false"; print "  mtu: 9000"; print "  strict-route: true"; print "profile:"; print "  store-selected: false"; print "  store-fake-ip: true"; print "sniffer:"; print "  enable: true"; print "  override-destination: false"; print "  sniff:"; print "    TLS:"; print "      ports: [443, 8443]"; print "    HTTP:"; print "      ports: [80, 8080-8880]"; print "      override-destination: true"; print "  force-domain:"; print "    - +.v2ex.com"; print "dns:"; print "  enable: true"; print "  prefer-h3: true"; print "  listen: 0.0.0.0:53"; print "  ipv6: true"; print "  ipv6-timeout: 300"; print "  default-nameserver:"; print "    - 114.114.114.114"; print "    - 8.8.8.8"; print "    - tls://1.12.12.12:853"; print "    - tls://223.5.5.5:853"; print "    - system"; print "  enhanced-mode: fake-ip"; print "  fake-ip-range: 198.18.0.1/16"; print "  nameserver:"; print "    - https://dns.alidns.com/dns-query"; print "    - https://223.5.5.5/dns-query"; print "    - https://doh.pub/dns-query"; print "    - https://dns.alidns.com/dns-query#h3=true"; print "    - quic://dns.adguard.com:784"; print "  fallback:"; print "    - tls://dns.google"; print "    - https://1.1.1.1/dns-query"; print "    - https://cloudflare-dns.com/dns-query"; print "    - https://dns.google/dns-query"; print "  fallback-filter:"; print "    geoip: true"; print "    geoip-code: CN"; print "    geosite:"; print "      - gfw"; print "    ipcidr:"; print "      - 240.0.0.0/4"; print "    domain:"; print "      - \"+.google.com\""; print "      - \"+.facebook.com\""; print "      - \"+.youtube.com\""; print "  nameserver-policy:"; print "    \"geosite:cn,private,apple\":"; print "      - https://doh.pub/dns-query"; print "      - https://dns.alidns.com/dns-query"; print "    \"geosite:category-ads-all\": rcode://success"; print "    \"www.baidu.com,+.google.cn\": [223.5.5.5, https://dns.alidns.com/dns-query]"; print "proxies:"; print "proxy-groups:"; print "  - name: Proxy"; print "    type: select"; print "    proxies:"; print "      - auto"; print "  - name: auto"; print "    type: url-test"; print "    proxies:"; print "    url: \"https://cp.cloudflare.com/generate_204\""; print "    interval: 300"; print "rules:"; print "  - DOMAIN,clash.razord.top,DIRECT"; print "  - DOMAIN,yacd.haishan.me,DIRECT"; print "  - GEOSITE,private,DIRECT"; print "  - GEOSITE,category-ads-all,REJECT"; print "  - GEOSITE,CN,DIRECT"; print "  - GEOIP,LAN,DIRECT,no-resolve"; print "  - GEOIP,CN,DIRECT,no-resolve"; print "  - MATCH,Proxy"; }' > "${clash_yaml}"
     sed -i'' -e '/^      - "+\.google\.com"/s/"/'\''/g' "${clash_yaml}"
     sed -i'' -e '/^      - "+\.facebook\.com"/s/"/'\''/g' "${clash_yaml}"
     sed -i'' -e '/^      - "+\.youtube\.com"/s/"/'\''/g' "${clash_yaml}" 
