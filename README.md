@@ -129,34 +129,34 @@ service iptables save
 ```
 
 # **脚本支持的节点类型**
-- **Socks**
+- **SOCKS**
 - **TUIC V5**
 - **juicity**
 - **WireGuard--解锁 ChatGPT、Netflix、Disney+**
 - **Hysteria2**
-- **Vless+tcp**
-- **Vless+ws**
-- **Vless+gRPC**
-- **Vless+vision+Reality**
-- **Vless+h2+Reality**
-- **Vless+gRPC+Reality**
+- **VLESS+TCP**
+- **VLESS+WebSocket**
+- **VLESS+gRPC**
+- **VLESS+Vision+REALITY**
+- **VLESS+H2C+REALITY**
+- **VLESS+gRPC+REALITY**
 - **Direct--sing-box版任意门**
-- **Trojan+tcp**
-- **Trojan+ws**
+- **Trojan+TCP**
+- **Trojan+WebSocket**
 - **Trojan+gRPC**
-- **Trojan+tcp+tls**
-- **Trojan+H2C+tls**
-- **Trojan+gRPC+tls**
-- **Trojan+ws+tls**
+- **Trojan+TCP+TLS**
+- **Trojan+H2C+TLS**
+- **Trojan+gRPC+TLS**
+- **Trojan+WebSocket+TLS**
 - **Hysteria**
 - **ShadowTLS V3**
 - **NaiveProxy**
 - **Shadowsocks**
-- **Vmess+tcp**
-- **Vmess+ws**
-- **Vmess+grpc**   
-- **Vmess+tcp+tls**
-- **Vmess+ws+tls** 
-- **Vmess+h2+tls**
-- **Vmess+grpc+tls** 
+- **VMess+TCP**
+- **VMess+WebSocket**
+- **VMess+gRPC**   
+- **VMess+TCP+TLS**
+- **VMess+WebSocket+TLS** 
+- **VMess+H2C+TLS**
+- **VMess+gRPC+TLS** 
 
