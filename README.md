@@ -131,7 +131,7 @@ service iptables save
 # **脚本支持的节点类型**
 - **SOCKS**
 - **TUIC V5**
-- **juicity**
+- **Juicity**
 - **WireGuard--解锁 ChatGPT、Netflix、Disney+**
 - **Hysteria2**
 - **VLESS+TCP**
