@@ -2592,7 +2592,7 @@ function generate_shadowsocks_win_client_config() {
   local proxy_name
   
   while true; do
-    proxy_name="socks-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
+    proxy_name="ss-$(head /dev/urandom | tr -dc '0-9' | head -c 4)"
     if ! grep -q "name: $proxy_name" "$win_client_file"; then
       break
     fi
