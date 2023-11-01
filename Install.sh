@@ -920,14 +920,27 @@ function get_local_ip() {
     local local_ip_v4
     local local_ip_v6
 
-    local_ip_v4=$(curl -s4 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s4 icanhazip.com)
-    local_ip_v6=$(curl -s6 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}' || curl -s6 icanhazip.com)
-
+    local_ip_v4=$(curl -s4 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}')
     if [[ -n "$local_ip_v4" ]]; then
         ip_v4="$local_ip_v4"
-    elif [[ -n "$local_ip_v6" ]]; then
+    else
+        local_ip_v4=$(curl -s4 icanhazip.com)
+        if [[ -n "$local_ip_v4" ]]; then
+            ip_v4="$local_ip_v4"
+        fi
+    fi
+
+    local_ip_v6=$(curl -s6 https://api.myip.com | grep -o '"ip":"[^"]*' | awk -F ':"' '{print $2}')
+    if [[ -n "$local_ip_v6" ]]; then
         ip_v6="$local_ip_v6"
     else
+        local_ip_v6=$(curl -s6 icanhazip.com)
+        if [[ -n "$local_ip_v6" ]]; then
+            ip_v6="$local_ip_v6"
+        fi
+    fi
+
+    if [[ -z "$ip_v4" && -z "$ip_v6" ]]; then
         echo -e "${RED}无法获取本机IP地址！${NC}"
     fi
 }
